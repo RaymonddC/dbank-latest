@@ -1,0 +1,189 @@
+.dashboard {
+  max-width: 1100px;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+}
+
+.balance-card {
+  background: linear-gradient(135deg, #1a1f36, #2d3956);
+  border-radius: 24px;
+  padding: 2.5rem;
+  color: white;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  margin-bottom: 3rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+
+  .balance-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+
+    .icon {
+      font-size: 1.75rem;
+      color: #7c8aff;
+    }
+
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.9);
+    }
+  }
+
+  .balance-amount {
+    font-size: 3.5rem;
+    font-weight: 600;
+    margin: 1.5rem 0;
+    background: linear-gradient(90deg, #7c8aff, #c4ccff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .balance-subtitle {
+    font-size: 0.875rem;
+    color: rgba(255, 255, 255, 0.6);
+  }
+}
+
+.transactions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 2rem;
+}
+
+.transaction-card {
+  background: rgba(26, 31, 54, 0.8);
+  backdrop-filter: blur(20px);
+  border-radius: 20px;
+  padding: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+
+  h3 {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 2rem;
+    font-size: 1.125rem;
+    font-weight: 500;
+    
+    .icon {
+      font-size: 1.5rem;
+    }
+  }
+
+  &.deposit {
+    h3 { color: #7c8aff; }
+  }
+
+  &.withdraw {
+    h3 { color: #ff7c7c; }
+  }
+}
+
+.input-group {
+  position: relative;
+  margin-bottom: 1.5rem;
+
+  .input-prefix {
+    position: absolute;
+    left: 1.25rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.875rem;
+  }
+
+  input {
+    width: 100%;
+    padding: 1rem 1rem 1rem 2.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    color: white;
+    font-size: 1rem;
+    transition: all 0.2s ease;
+
+    &:focus {
+      outline: none;
+      border-color: #7c8aff;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    &::placeholder {
+      color: rgba(255, 255, 255, 0.3);
+    }
+  }
+}
+
+button {
+  width: 100%;
+  padding: 1rem;
+  border: none;
+  border-radius: 12px;
+  background: #7c8aff;
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: #8995ff;
+    transform: translateY(-1px);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+  }
+}
+
+.notification {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  color: white;
+  font-size: 0.875rem;
+  backdrop-filter: blur(10px);
+  animation: slideIn 0.3s ease;
+  z-index: 1000;
+  
+  &.success {
+    background: rgba(124, 138, 255, 0.9);
+    border: 1px solid rgba(124, 138, 255, 0.3);
+  }
+
+  &.error {
+    background: rgba(255, 124, 124, 0.9);
+    border: 1px solid rgba(255, 124, 124, 0.3);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard {
+    padding: 1rem;
+    margin: 1rem auto;
+  }
+
+  .balance-card {
+    padding: 1.5rem;
+    
+    .balance-amount {
+      font-size: 2.5rem;
+    }
+  }
+}

@@ -15,6 +15,7 @@
     "src/dbank-latest-frontend"
   ],
   "dependencies": {
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "react-icons": "^5.4.0"
   }
 }
