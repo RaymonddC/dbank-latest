@@ -3,12 +3,16 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import environment from 'vite-plugin-environment';
 import dotenv from 'dotenv';
+import path from 'path';
 
 dotenv.config({ path: '../../.env' });
 
 export default defineConfig({
   build: {
+    outDir: 'dist',
     emptyOutDir: true,
+    target: 'esnext',
+    minify: 'esbuild'
   },
   optimizeDeps: {
     esbuildOptions: {
@@ -31,14 +35,12 @@ export default defineConfig({
     environment("all", { prefix: "DFX_" }),
   ],
   resolve: {
-    alias: [
-      {
-        find: "declarations",
-        replacement: fileURLToPath(
-          new URL("../declarations", import.meta.url)
-        ),
-      },
-    ],
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+      "declarations": fileURLToPath(
+        new URL("../declarations", import.meta.url)
+      ),
+    },
     dedupe: ['@dfinity/agent'],
   },
 });

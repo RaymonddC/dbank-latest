@@ -4,11 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "setup": "npm i && dfx canister create dbank-latest-backend && dfx generate dbank-latest-backend && dfx deploy",
     "start": "vite --port 3000",
-    "prebuild": "dfx generate",
     "build": "tsc && vite build",
-    "format": "prettier --write \"src/**/*.{json,js,jsx,ts,tsx,css,scss}\""
+    "format": "prettier --write \"src/**/*.{json,js,jsx,ts,tsx,css,scss}\"",
+    "clean": "dfx stop && dfx start --clean --background",
+    "deploy": "dfx deploy"
   },
   "dependencies": {
     "react": "^18.2.0",

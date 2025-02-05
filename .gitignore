@@ -1,3 +1,5 @@
+* text=auto eol=lf
+
 # Various IDEs and Editors
 .vscode/
 .idea/

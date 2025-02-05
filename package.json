@@ -5,14 +5,16 @@
   },
   "name": "dbank-latest",
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
-    "prebuild": "npm run prebuild --workspaces --if-present",
-    "pretest": "npm run prebuild --workspaces --if-present",
-    "start": "npm start --workspaces --if-present",
-    "test": "npm test --workspaces --if-present"
+    "build": "dfx generate && dfx canister create --all && npm run build --workspace dbank-latest-frontend",
+    "prebuild": "dfx canister create --all",
+    "start": "npm start --workspace dbank-latest-frontend",
+    "test": "npm test --workspace dbank-latest-frontend"
   },
   "type": "module",
   "workspaces": [
     "src/dbank-latest-frontend"
-  ]
+  ],
+  "dependencies": {
+    "dotenv": "^16.4.7"
+  }
 }

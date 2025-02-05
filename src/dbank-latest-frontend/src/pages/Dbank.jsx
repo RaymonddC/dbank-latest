@@ -66,7 +66,7 @@ const Dbank = () => {
 
   return (
     <div className="container">
-      <img src="dbank_logo.png" alt="DBank logo" width="100" />
+      <img src="/dbank_logo.png" alt="DBank logo" width="100" />
       <h1>Current Balance: ${balance.toFixed(2)}</h1>
       <div className="divider"></div>
       <form onSubmit={handleTopUp}>
