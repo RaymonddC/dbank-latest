@@ -1,18 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, FormEvent } from 'react';
 import { dbank_latest_backend as dbank } from '../../../declarations/dbank-latest-backend';
 import './main.css';
 
-const Dbank = () => {
-  const [balance, setBalance] = useState(0);
-  const [topUpAmount, setTopUpAmount] = useState('');
-  const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [loading, setLoading] = useState(false);
+const Dbank: React.FC = () => {
+  const [balance, setBalance] = useState<number>(0);
+  const [topUpAmount, setTopUpAmount] = useState<string>('');
+  const [withdrawAmount, setWithdrawAmount] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
 
   useEffect(() => {
-    const fetchBalance = async () => {
+    const fetchBalance = async (): Promise<void> => {
       try {
         await dbank.compound();
-        const currentBalance = await dbank.checkBalance();
+        const currentBalance: number = await dbank.checkBalance();
         setBalance(Math.round(currentBalance * 100) / 100);
       } catch (error) {
         console.error('Error fetching balance:', error);
@@ -22,9 +22,9 @@ const Dbank = () => {
     fetchBalance();
   }, []);
 
-  const handleTopUp = async (e) => {
+  const handleTopUp = async (e: FormEvent): Promise<void> => {
     e.preventDefault();
-    const amount = parseFloat(topUpAmount);
+    const amount: number = parseFloat(topUpAmount);
     if (isNaN(amount) || amount <= 0) {
       console.error('Invalid top-up amount. Please enter a positive number.');
       return;
@@ -32,7 +32,7 @@ const Dbank = () => {
     setLoading(true);
     try {
       await dbank.topUp(amount);
-      const updatedBalance = await dbank.checkBalance();
+      const updatedBalance: number = await dbank.checkBalance();
       setBalance(Math.round(updatedBalance * 100) / 100);
       setTopUpAmount('');
     } catch (error) {
@@ -43,9 +43,9 @@ const Dbank = () => {
     }
   };
 
-  const handleWithdraw = async (e) => {
+  const handleWithdraw = async (e: FormEvent): Promise<void> => {
     e.preventDefault();
-    const amount = parseFloat(withdrawAmount);
+    const amount: number = parseFloat(withdrawAmount);
     if (isNaN(amount) || amount <= 0) {
       console.error('Invalid withdrawal amount. Please enter a positive number.');
       return;
@@ -53,7 +53,7 @@ const Dbank = () => {
     setLoading(true);
     try {
       await dbank.withdraw(amount);
-      const updatedBalance = await dbank.checkBalance();
+      const updatedBalance: number = await dbank.checkBalance();
       setBalance(Math.round(updatedBalance * 100) / 100);
       setWithdrawAmount('');
     } catch (error) {

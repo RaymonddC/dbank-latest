@@ -1,12 +1,17 @@
 {
   "compilerOptions": {
+    "target": "ES6",
+    "module": "ESNext",
+    "jsx": "react",
     "strict": true,
-    "target": "ES2020",
-    "experimentalDecorators": true,
-    "strictPropertyInitialization": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
     "moduleResolution": "node",
-    "allowJs": true,
-    "outDir": "HACK_BECAUSE_OF_ALLOW_JS",
-    "jsx": "react"
-  }
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
 }
