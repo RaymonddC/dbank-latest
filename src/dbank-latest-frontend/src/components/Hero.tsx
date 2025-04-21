@@ -1,6 +1,5 @@
-
-import { ArrowRight, ChevronDown } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowRight, ChevronDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 const Hero = () => {
   const scrollToTransactions = () => {
@@ -23,19 +22,17 @@ const Hero = () => {
           <h1 className="text-4xl md:text-6xl font-bold mb-6">
             Secure <span className="text-gradient drop-shadow-sm">ICP Network</span> Transactions Made Simple
           </h1>
-          <p className="text-xl text-slate-600 dark:text-slate-300 mb-10 max-w-2xl mx-auto">
-            The most elegant way to top up and withdraw from the Internet Computer Protocol network. Fast, secure, and designed for you.
-          </p>
+          <p className="text-xl text-slate-600 dark:text-slate-300 mb-10 max-w-2xl mx-auto">The most elegant way to top up and withdraw from the Internet Computer Protocol network. Fast, secure, and designed for you.</p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Button 
-              className="bg-gradient-to-r from-icp-blue to-icp-teal hover:from-icp-teal hover:to-icp-blue dark:from-icp-teal dark:to-icp-blue dark:hover:from-icp-blue dark:hover:to-icp-teal transition-all duration-200 text-white px-8 py-6 text-lg font-medium shadow-md hover:shadow-xl group" 
+            <Button
+              className="relative bg-gradient-to-r from-icp-blue via-icp-teal to-icp-blue bg-[size:200%_100%] bg-right-bottom hover:bg-left-bottom text-white font-medium shadow-md hover:shadow-lg transition-[background-position] duration-500 ease-in-out px-8 py-6 text-lg group"
               onClick={scrollToTransactions}
             >
-              Get Started <ArrowRight className="ml-2 h-5 w-5 transition-transform duration-200 group-hover:translate-x-1" />
+              Get Started <ArrowRight className="ml-2 h-5 w-5 transition-transform duration-300 group-hover:translate-x-1" />
             </Button>
-            <Button 
+            <Button
               variant="outline"
-              className="border-2 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800 px-8 py-6 text-lg font-medium shadow-md hover:shadow-xl transition-all duration-200"
+              className="border-2 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800 px-8 py-6 text-lg font-medium shadow-md hover:shadow-xl transition-all duration-300 ease-in-out"
             >
               Learn More
             </Button>

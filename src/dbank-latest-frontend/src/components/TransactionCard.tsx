@@ -13,6 +13,7 @@ const TransactionCard = () => {
   const [balance, setBalance] = useState<number>(0);
   const [amount, setAmount] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<string>('topup');
 
   useEffect(() => {
     const fetchBalance = async (): Promise<void> => {
@@ -72,37 +73,33 @@ const TransactionCard = () => {
         <TabsList className="grid w-full grid-cols-2 p-0 rounded-none">
           <TabsTrigger
             value="topup"
-            className="rounded-none py-3 overflow-hidden transition-all duration-200
-              data-[state=active]:bg-gradient-to-r 
-              data-[state=active]:from-icp-blue data-[state=active]:to-icp-teal 
-              dark:data-[state=active]:from-icp-teal dark:data-[state=active]:to-icp-blue 
+            className="rounded-none py-3 overflow-hidden transition-colors duration-300
+              data-[state=active]:bg-gradient-to-r data-[state=active]:from-icp-blue data-[state=active]:to-icp-teal 
               data-[state=active]:text-white data-[state=active]:font-medium 
               data-[state=inactive]:bg-slate-50 
               dark:data-[state=inactive]:bg-slate-800 
               data-[state=inactive]:text-slate-500 
               dark:data-[state=inactive]:text-slate-300"
           >
-            <Upload className="mr-2 h-4 w-4 transition-all duration-200" />
+            <Upload className="mr-2 h-4 w-4" />
             Top Up
           </TabsTrigger>
           <TabsTrigger
             value="withdraw"
-            className="rounded-none py-3 overflow-hidden transition-all duration-200
-              data-[state=active]:bg-gradient-to-r 
-              data-[state=active]:from-icp-blue data-[state=active]:to-icp-teal 
-              dark:data-[state=active]:from-icp-teal dark:data-[state=active]:to-icp-blue 
+            className="rounded-none py-3 overflow-hidden transition-colors duration-300
+              data-[state=active]:bg-gradient-to-r data-[state=active]:from-icp-blue data-[state=active]:to-icp-teal
               data-[state=active]:text-white data-[state=active]:font-medium 
               data-[state=inactive]:bg-slate-50 
               dark:data-[state=inactive]:bg-slate-800 
               data-[state=inactive]:text-slate-500 
               dark:data-[state=inactive]:text-slate-300"
           >
-            <Download className="mr-2 h-4 w-4 transition-all duration-200" />
+            <Download className="mr-2 h-4 w-4" />
             Withdraw
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="topup">
+        <TabsContent value="topup" className="opacity-100 transition-opacity duration-300 data-[state=inactive]:opacity-0">
           <CardHeader>
             <CardTitle>Top Up Your ICP Wallet</CardTitle>
             <CardDescription>Add funds to your Internet Computer wallet quickly and securely.</CardDescription>
@@ -133,7 +130,7 @@ const TransactionCard = () => {
                 </div>
               </div>
               <Button
-                className="w-full mt-6 relative bg-gradient-to-r from-icp-blue to-icp-teal hover:from-icp-teal hover:to-icp-blue dark:from-icp-teal dark:to-icp-blue dark:hover:from-icp-blue dark:hover:to-icp-teal text-white font-medium shadow-md hover:shadow-lg transition-all duration-200 group bg-size-200 bg-pos-0 hover:bg-pos-100"
+                className="w-full mt-6 relative bg-gradient-to-r from-icp-blue via-icp-teal to-icp-blue bg-[size:200%_100%] bg-right-bottom hover:bg-left-bottom text-white font-medium shadow-md hover:shadow-lg transition-[background-position] duration-500 ease-in-out group"
                 type="submit"
                 disabled={loading}
               >
@@ -149,7 +146,7 @@ const TransactionCard = () => {
           </CardContent>
         </TabsContent>
 
-        <TabsContent value="withdraw">
+        <TabsContent value="withdraw" className="opacity-100 transition-opacity duration-300 data-[state=inactive]:opacity-0">
           <CardHeader>
             <CardTitle>Withdraw From Your ICP Wallet</CardTitle>
             <CardDescription>Transfer funds from your Internet Computer wallet to your bank account.</CardDescription>
@@ -180,7 +177,7 @@ const TransactionCard = () => {
                 </div>
               </div>
               <Button
-                className="w-full mt-6 relative bg-gradient-to-r from-icp-blue to-icp-teal hover:from-icp-teal hover:to-icp-blue dark:from-icp-teal dark:to-icp-blue dark:hover:from-icp-blue dark:hover:to-icp-teal text-white font-medium shadow-md hover:shadow-lg transition-all duration-200 group bg-size-200 bg-pos-0 hover:bg-pos-100"
+                className="w-full mt-6 relative bg-gradient-to-r from-icp-blue via-icp-teal to-icp-blue bg-[size:200%_100%] bg-right-bottom hover:bg-left-bottom text-white font-medium shadow-md hover:shadow-lg transition-[background-position] duration-500 ease-in-out group"
                 type="submit"
                 disabled={loading}
               >
