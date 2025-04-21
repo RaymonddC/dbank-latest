@@ -12,26 +12,32 @@ actor DBank {
   Debug.print(debug_show (startTime));
 
   let id = 234902384;
+  let networkFee : Float = 0.0005;
+  let withdrawalFee : Float = 0.001;
 
   Debug.print(debug_show (currentValue));
   // Debug.print(debug_show (id));
 
   public func topUp(amount : Float) {
-    currentValue += amount;
-    Debug.print(debug_show (currentValue));
+    if (amount > networkFee) {
+      currentValue += (amount - networkFee);
+      Debug.print(debug_show (currentValue));
+    } else {
+      Debug.print("Amount must be greater than network fee");
+    };
   };
 
   public func withdraw(amount : Float) {
-    if (currentValue < amount) {
-      Debug.print("Insufficient funds");
+    let totalWithFee = amount + withdrawalFee;
+    if (currentValue < totalWithFee) {
+      Debug.print("Insufficient funds including fee");
     } else {
-      currentValue -= amount;
+      currentValue -= totalWithFee;
+      Debug.print(debug_show (currentValue));
     };
-    Debug.print(debug_show (currentValue));
   };
 
   public query func checkBalance() : async Float {
-    // await Nat.sleep(1000);
     return currentValue;
   };
 
@@ -43,7 +49,13 @@ actor DBank {
     let currentTime = Time.now();
     let timeElapsedNS = currentTime - startTime;
     let timeElapsedS = timeElapsedNS / 1000000000;
-    currentValue := currentValue * (1.0001 ** Float.fromInt(timeElapsedS));
+
+    // Calculate rate that compounds to exactly 1% daily
+    // 1.01 = target daily multiplier (1% increase)
+    // 1/86400 = one second as fraction of a day
+    // (1.01 ^ (1/86400)) = per-second rate for 1% daily
+    let perSecondRate = 1.01 ** (1.0 / 86400.0);
+    currentValue := currentValue * (perSecondRate ** Float.fromInt(timeElapsedS));
     startTime := currentTime;
   };
 
