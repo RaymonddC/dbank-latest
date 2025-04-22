@@ -69,31 +69,20 @@ const TransactionCard = () => {
 
   return (
     <Card className="max-w-md w-full mx-auto shadow-xl border-slate-200 dark:border-slate-700/50 glass-card overflow-hidden">
-      <Tabs defaultValue="topup" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 p-0 rounded-none">
-          <TabsTrigger
-            value="topup"
-            className="rounded-none py-3 overflow-hidden transition-colors duration-300
-              data-[state=active]:bg-gradient-to-r data-[state=active]:from-icp-blue data-[state=active]:to-icp-teal 
-              data-[state=active]:text-white data-[state=active]:font-medium 
-              data-[state=inactive]:bg-slate-50 
-              dark:data-[state=inactive]:bg-slate-800 
-              data-[state=inactive]:text-slate-500 
-              dark:data-[state=inactive]:text-slate-300"
-          >
+      <Tabs defaultValue="topup" className="w-full" onValueChange={setActiveTab}>
+        <TabsList className="relative grid w-full grid-cols-2 p-0 rounded-none overflow-hidden bg-icp-blue">
+          <div
+            className="absolute inset-0 bg-icp-teal transition-transform duration-500 linear"
+            style={{
+              width: '50%',
+              transform: activeTab === 'withdraw' ? 'translateX(100%)' : 'translateX(0)',
+            }}
+          />
+          <TabsTrigger value="topup" className="relative py-3 text-white font-medium data-[state=active]:bg-transparent">
             <Upload className="mr-2 h-4 w-4" />
             Top Up
           </TabsTrigger>
-          <TabsTrigger
-            value="withdraw"
-            className="rounded-none py-3 overflow-hidden transition-colors duration-300
-              data-[state=active]:bg-gradient-to-r data-[state=active]:from-icp-blue data-[state=active]:to-icp-teal
-              data-[state=active]:text-white data-[state=active]:font-medium 
-              data-[state=inactive]:bg-slate-50 
-              dark:data-[state=inactive]:bg-slate-800 
-              data-[state=inactive]:text-slate-500 
-              dark:data-[state=inactive]:text-slate-300"
-          >
+          <TabsTrigger value="withdraw" className="relative py-3 text-white font-medium data-[state=active]:bg-transparent">
             <Download className="mr-2 h-4 w-4" />
             Withdraw
           </TabsTrigger>
