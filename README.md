@@ -1,59 +1,78 @@
-# `dbank-latest`
+# dbank — Decentralized Bank on the Internet Computer
 
-Welcome to your new `dbank-latest` project and to the Internet Computer development community. By default, creating a new project adds this README and some template files to your project directory. You can edit these template files to customize your project and to include your own code to speed up the development cycle.
+A decentralized banking dapp built on the Internet Computer Protocol (ICP). It pairs a Motoko canister backend with a custom React + TypeScript frontend, demonstrating end-to-end integration between an on-chain canister and a polished, production-style UI.
 
-To get started, you might want to explore the project directory structure and the default configuration file. Working with this project in your development environment will not affect any production deployment or identity tokens.
+## What it does
 
-To learn more before you start working with `dbank-latest`, see the following documentation available online:
+- **Deposit (top-up)** funds into an on-chain canister, with a transparent network fee deducted on entry.
+- **Withdraw** funds, with a withdrawal fee deducted at exit.
+- **Per-second compounding interest** that compounds to exactly 1% daily, applied automatically when the balance is queried.
+- **Real-time balance queries** through the canister's query interface.
 
-- [Quick Start](https://internetcomputer.org/docs/current/developer-docs/setup/deploy-locally)
-- [SDK Developer Tools](https://internetcomputer.org/docs/current/developer-docs/setup/install)
-- [Motoko Programming Language Guide](https://internetcomputer.org/docs/current/motoko/main/motoko)
-- [Motoko Language Quick Reference](https://internetcomputer.org/docs/current/motoko/main/language-manual)
+## Tech stack
 
-If you want to start working on your project right away, you might want to try the following commands:
+**Backend (on-chain)**
+- Motoko canister deployed via `dfx`
+- Stable variables for persistent state across upgrades
+- Public functions: `topUp`, `withdraw`, `checkBalance`, `compound`, `getID`
 
-```bash
-cd dbank-latest/
-dfx help
-dfx canister --help
+**Frontend**
+- React 18 + TypeScript + Vite
+- Tailwind CSS + shadcn/ui (Radix primitives)
+- React Router for multi-page navigation
+- Custom hooks (`useInterestRate`) for reactive interest calculations
+- Dark mode via theme toggle
+- Glass-morphism cards with ICP-branded gradient styling
+
+## Project structure
+
+```
+src/
+├── dbank-latest-backend/
+│   └── main.mo                 # Motoko canister (actor DBank)
+└── dbank-latest-frontend/
+    ├── src/
+    │   ├── pages/
+    │   │   ├── Index.tsx       # Marketing landing page
+    │   │   ├── Dbank.tsx       # Banking interface (top-up / withdraw tabs)
+    │   │   └── NotFound.tsx
+    │   ├── components/         # Hero, Features, TrustSection, ThemeToggle, etc.
+    │   ├── hooks/useInterestRate.ts
+    │   └── lib/utils.ts
+    ├── tailwind.config.ts
+    └── vite.config.ts
 ```
 
-## Running the project locally
+## Running locally
 
-If you want to test your project locally, you can use the following commands:
+Prerequisites: [DFX SDK](https://internetcomputer.org/docs/current/developer-docs/setup/install) and Node.js 18+.
 
 ```bash
-# Starts the replica, running in the background
+# 1. Start the local ICP replica
 dfx start --background
 
-# Deploys your canisters to the replica and generates your candid interface
+# 2. Deploy the canister and generate the Candid interface
 dfx deploy
+
+# 3. Start the frontend dev server
+npm install
+npm start
 ```
 
-Once the job completes, your application will be available at `http://localhost:4943?canisterId={asset_canister_id}`.
+The frontend will run at `http://localhost:8080` and proxy canister calls to the local replica at `http://localhost:4943`.
 
-If you have made changes to your backend canister, you can generate a new candid interface with
+To regenerate the Candid interface after backend changes:
 
 ```bash
 npm run generate
 ```
 
-at any time. This is recommended before starting the frontend development server, and will be run automatically any time you run `dfx deploy`.
+## Notes
 
-If you are making frontend changes, you can start a development server with
+- Canister state uses `stable` variables so balances and timing survive canister upgrades.
+- The interest formula `(1.01 ^ (1/86400))` per second yields exactly 1% compounded daily.
+- This project is an exploration of ICP frontend integration; the canister logic is intentionally simple to keep focus on the React ↔ Motoko interface.
 
-```bash
-npm start
-```
+## License
 
-Which will start a server at `http://localhost:8080`, proxying API requests to the replica at port 4943.
-
-### Note on frontend environment variables
-
-If you are hosting frontend code somewhere without using DFX, you may need to make one of the following adjustments to ensure your project does not fetch the root key in production:
-
-- set`DFX_NETWORK` to `ic` if you are using Webpack
-- use your own preferred method to replace `process.env.DFX_NETWORK` in the autogenerated declarations
-  - Setting `canisters -> {asset_canister_id} -> declarations -> env_override to a string` in `dfx.json` will replace `process.env.DFX_NETWORK` with the string in the autogenerated declarations
-- Write your own `createActor` constructor
+MIT
