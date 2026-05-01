@@ -36,15 +36,22 @@ const Header = () => {
           {/* Mobile Menu and Theme Toggle */}
           <div className="md:hidden flex items-center space-x-3">
             <ThemeToggle />
-            <button className="text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 p-2 rounded-full transition-colors duration-300" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-              {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            <button
+              type="button"
+              className="text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 p-2 rounded-full transition-colors duration-300"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="mobile-nav"
+            >
+              {mobileMenuOpen ? <X className="h-6 w-6" aria-hidden /> : <Menu className="h-6 w-6" aria-hidden />}
             </button>
           </div>
         </div>
 
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
-          <nav className="md:hidden py-4 flex flex-col space-y-4 animate-fade-in bg-white/95 dark:bg-slate-900/95 rounded-b-lg">
+          <nav id="mobile-nav" className="md:hidden py-4 flex flex-col space-y-4 animate-fade-in bg-white/95 dark:bg-slate-900/95 rounded-b-lg">
             <a href="#features" className="font-medium text-slate-700 dark:text-slate-200 hover:text-icp-teal dark:hover:text-icp-darkTeal transition-colors duration-200 px-2 py-1" onClick={() => setMobileMenuOpen(false)}>
               Features
             </a>

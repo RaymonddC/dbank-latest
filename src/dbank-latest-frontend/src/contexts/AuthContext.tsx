@@ -26,12 +26,7 @@ const identityProvider = isLocal
   : 'https://identity.ic0.app';
 
 async function buildActor(identity: Identity): Promise<DBankActor> {
-  const agent = await HttpAgent.create({ identity, host });
-  if (isLocal) {
-    await agent.fetchRootKey().catch((err) => {
-      console.warn('Unable to fetch root key — is the local replica running?', err);
-    });
-  }
+  const agent = await HttpAgent.create({ identity, host, shouldFetchRootKey: isLocal });
   return Actor.createActor<DBankActor>(idlFactory, { agent, canisterId });
 }
 
@@ -69,7 +64,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         identityProvider,
         maxTimeToLive: BigInt(7 * 24 * 60 * 60 * 1_000_000_000), // 7 days
         onSuccess: () => resolve(),
-        onError: (err) => reject(err instanceof Error ? err : new Error(String(err))),
+        onError: (err) => reject(new Error(err ?? 'Sign-in cancelled')),
       });
     });
     const id = authClient.getIdentity();

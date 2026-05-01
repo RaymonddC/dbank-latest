@@ -108,4 +108,8 @@ actor DBank {
   public query func getID() : async Nat {
     234902384;
   };
+
+  public query func getFees() : async { networkFee : Float; withdrawalFee : Float } {
+    { networkFee; withdrawalFee };
+  };
 };
