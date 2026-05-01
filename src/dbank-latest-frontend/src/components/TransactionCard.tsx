@@ -3,12 +3,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Download, ArrowRight } from 'lucide-react';
-import { dbank_latest_backend as dbank } from '../../../declarations/dbank-latest-backend';
+import { Upload, Download, ArrowRight, Lock } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import WalletButton from './WalletButton';
 
 const TransactionCard = () => {
   const networkFee = Number(import.meta.env.VITE_NETWORK_FEE) || 0.0005;
   const withdrawalFee = Number(import.meta.env.VITE_WITHDRAWAL_FEE) || 0.001;
+
+  const { actor: dbank, isAuthenticated, isReady } = useAuth();
 
   const [balance, setBalance] = useState<number>(0);
   const [amount, setAmount] = useState<string>('');
@@ -16,21 +19,30 @@ const TransactionCard = () => {
   const [activeTab, setActiveTab] = useState<string>('topup');
 
   useEffect(() => {
+    if (!dbank || !isAuthenticated) {
+      setBalance(0);
+      return;
+    }
+    let cancelled = false;
     const fetchBalance = async (): Promise<void> => {
       try {
         await dbank.compound();
-        const currentBalance: number = await dbank.checkBalance();
+        const currentBalance = Number(await dbank.checkBalance());
+        if (cancelled) return;
         setBalance(Math.round(currentBalance * 100) / 100);
       } catch (error) {
         console.error('Error fetching balance:', error);
       }
     };
-
     fetchBalance();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [dbank, isAuthenticated]);
 
   const handleSubmit = async (e: React.FormEvent, type: string) => {
     e.preventDefault();
+    if (!dbank) return;
     const parsedAmount: number = parseFloat(amount);
 
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
@@ -38,7 +50,6 @@ const TransactionCard = () => {
       return;
     }
 
-    // Validate amount with fees
     if (type === 'withdrawal' && parsedAmount + withdrawalFee > balance) {
       console.error('Insufficient funds including fee');
       return;
@@ -57,7 +68,7 @@ const TransactionCard = () => {
       }
 
       await dbank.compound();
-      const updatedBalance: number = await dbank.checkBalance();
+      const updatedBalance = Number(await dbank.checkBalance());
       setBalance(Math.round(updatedBalance * 100) / 100);
       setAmount('');
     } catch (error) {
@@ -66,6 +77,25 @@ const TransactionCard = () => {
       setLoading(false);
     }
   };
+
+  if (isReady && !isAuthenticated) {
+    return (
+      <Card className="max-w-md w-full mx-auto shadow-xl border-slate-200 dark:border-slate-700/50 glass-card">
+        <CardHeader className="items-center text-center">
+          <div className="bg-gradient-to-r from-icp-blue to-icp-teal p-3 rounded-full shadow-lg mb-2">
+            <Lock className="h-6 w-6 text-white" />
+          </div>
+          <CardTitle>Sign in to manage your wallet</CardTitle>
+          <CardDescription>
+            Connect with Internet Identity to top up, withdraw, and earn 1% daily compounding interest on your balance.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center pb-8">
+          <WalletButton />
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="max-w-md w-full mx-auto shadow-xl border-slate-200 dark:border-slate-700/50 glass-card overflow-hidden">

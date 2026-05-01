@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Menu, X, Wallet, ArrowRight } from 'lucide-react';
+import { Menu, X, Wallet } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
+import WalletButton from './WalletButton';
 
 const Header = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -30,9 +30,7 @@ const Header = () => {
               Security
             </a>
             <ThemeToggle />
-            <Button className="relative bg-gradient-to-r from-icp-blue via-icp-teal to-icp-blue bg-[size:200%_100%] bg-right-bottom hover:bg-left-bottom text-white font-medium shadow-md hover:shadow-lg transition-[background-position] duration-500 ease-in-out">
-              Connect Wallet <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
-            </Button>
+            <WalletButton />
           </nav>
 
           {/* Mobile Menu and Theme Toggle */}
@@ -56,9 +54,7 @@ const Header = () => {
             <a href="#trust" className="font-medium text-slate-700 dark:text-slate-200 hover:text-icp-teal dark:hover:text-icp-darkTeal transition-colors duration-200 px-2 py-1" onClick={() => setMobileMenuOpen(false)}>
               Security
             </a>
-            <Button className="w-full relative bg-gradient-to-r from-icp-blue via-icp-teal to-icp-blue bg-[size:200%_100%] bg-right-bottom hover:bg-left-bottom text-white font-medium shadow-md hover:shadow-lg transition-[background-position] duration-500 ease-in-out">
-              Connect Wallet <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
-            </Button>
+            <WalletButton fullWidth onAction={() => setMobileMenuOpen(false)} />
           </nav>
         )}
       </div>
