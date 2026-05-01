@@ -3,7 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://ic0.app https://*.ic0.app https://icp0.io https://*.icp0.io https://identity.ic0.app https://id.ai http://localhost:4943 http://127.0.0.1:4943 ws://localhost:* ws://127.0.0.1:*; frame-src 'self' https://identity.ic0.app https://id.ai http://*.localhost:4943; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none';"
+    />
     <title>ICP Finance — Compounding wallet on the Internet Computer</title>
+    <meta
+      name="description"
+      content="An open-source compounding wallet on the Internet Computer. Sign in with Internet Identity, top up in ICP, and earn 1% daily interest accruing every second."
+    />
+    <meta property="og:title" content="ICP Finance" />
+    <meta property="og:description" content="A compounding wallet on the Internet Computer." />
+    <meta property="og:type" content="website" />
     <base href="/" />
     <link rel="icon" href="/favicon.ico" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -16,7 +27,6 @@
 
   <body>
     <div id="root"></div>
-    <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
