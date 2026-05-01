@@ -8,9 +8,9 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Actor, HttpAgent, type Identity } from '@dfinity/agent';
-import { AuthClient } from '@dfinity/auth-client';
-import type { Principal } from '@dfinity/principal';
+import { Actor, HttpAgent, type Identity } from '@icp-sdk/core/agent';
+import { AuthClient } from '@icp-sdk/auth/client';
+import { Principal } from '@icp-sdk/core/principal';
 import { toast } from 'sonner';
 import { idlFactory, canisterId } from '../../../declarations/dbank-latest-backend';
 import type { _SERVICE } from '../../../declarations/dbank-latest-backend/dbank-latest-backend.did';
@@ -64,7 +64,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const client = await AuthClient.create({
+      // @icp-sdk/auth: AuthClient is now a synchronous constructor;
+      // identityProvider lives on the constructor options, not on signIn.
+      const client = new AuthClient({
+        identityProvider,
         idleOptions: {
           idleTimeout: IDLE_TIMEOUT_MS,
           disableDefaultIdleCallback: true,
@@ -75,7 +78,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (cancelled) return;
       setAuthClient(client);
       if (authed) {
-        const id = client.getIdentity();
+        const id = await client.getIdentity();
         const a = await buildActor(id);
         if (cancelled) return;
         setIdentity(id);
@@ -107,7 +110,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     [authClient],
   );
 
-  // Idle auto-logout via AuthClient's idle manager.
   useEffect(() => {
     if (!authClient || !identity) return;
     const idleManager = authClient.idleManager;
@@ -117,8 +119,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
   }, [authClient, identity, logout]);
 
-  // Periodic delegation-expiry poll: catches the case where the delegation
-  // chain expires while the tab is open.
   useEffect(() => {
     if (!authClient || !identity) return;
     const id = window.setInterval(async () => {
@@ -132,8 +132,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => window.clearInterval(id);
   }, [authClient, identity, logout]);
 
-  // Connection heartbeat against the canister via an anonymous query.
-  // getFees() is a cheap query and doesn't require auth.
   const lastStatusRef = useRef<ConnectionStatus>('unknown');
   useEffect(() => {
     let cancelled = false;
@@ -169,15 +167,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const login = useCallback(async () => {
     if (!authClient) return;
-    await new Promise<void>((resolve, reject) => {
-      authClient.login({
-        identityProvider,
-        maxTimeToLive: SESSION_TTL_NS,
-        onSuccess: () => resolve(),
-        onError: (err) => reject(new Error(err ?? 'Sign-in cancelled')),
-      });
-    });
-    const id = authClient.getIdentity();
+    // signIn() replaces the old login(...). It returns the Identity directly
+    // and throws on cancel/error — no onSuccess/onError callbacks.
+    const id = await authClient.signIn({ maxTimeToLive: SESSION_TTL_NS });
     const a = await buildActor(id);
     setIdentity(id);
     setActor(a);

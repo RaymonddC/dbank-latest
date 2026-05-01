@@ -31,6 +31,6 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
-    dedupe: ['@dfinity/agent'],
+    dedupe: ['@icp-sdk/core'],
   },
 });
