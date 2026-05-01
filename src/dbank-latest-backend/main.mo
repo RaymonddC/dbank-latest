@@ -1,65 +1,111 @@
+import Buffer "mo:base/Buffer";
 import Debug "mo:base/Debug";
-import Nat "mo:base/Nat";
-import Time "mo:base/Time";
 import Float "mo:base/Float";
+import Principal "mo:base/Principal";
+import Time "mo:base/Time";
+import TrieMap "mo:base/TrieMap";
 
 actor DBank {
-  stable var currentValue : Float = 300;
-  currentValue := 300;
+  type Account = {
+    var balance : Float;
+    var lastCompoundedAt : Int;
+  };
 
-  stable var startTime = Time.now();
-  // startTime := Time.now();
-  Debug.print(debug_show (startTime));
+  type StableAccount = {
+    balance : Float;
+    lastCompoundedAt : Int;
+  };
 
-  let id = 234902384;
+  stable var accountEntries : [(Principal, StableAccount)] = [];
+
+  let accounts = TrieMap.TrieMap<Principal, Account>(Principal.equal, Principal.hash);
+
+  for ((p, sa) in accountEntries.vals()) {
+    accounts.put(p, { var balance = sa.balance; var lastCompoundedAt = sa.lastCompoundedAt });
+  };
+
   let networkFee : Float = 0.0005;
   let withdrawalFee : Float = 0.001;
+  // Per-second rate that compounds to exactly 1% daily: 1.01 ^ (1/86400).
+  let perSecondRate : Float = 1.01 ** (1.0 / 86400.0);
 
-  Debug.print(debug_show (currentValue));
-  // Debug.print(debug_show (id));
+  system func preupgrade() {
+    let buf = Buffer.Buffer<(Principal, StableAccount)>(accounts.size());
+    for ((p, a) in accounts.entries()) {
+      buf.add((p, { balance = a.balance; lastCompoundedAt = a.lastCompoundedAt }));
+    };
+    accountEntries := Buffer.toArray(buf);
+  };
 
-  public func topUp(amount : Float) {
+  system func postupgrade() {
+    accountEntries := [];
+  };
+
+  func requireAuthed(p : Principal) {
+    assert not Principal.isAnonymous(p);
+  };
+
+  func getOrCreate(p : Principal) : Account {
+    switch (accounts.get(p)) {
+      case (?a) a;
+      case null {
+        let a : Account = {
+          var balance = 0.0;
+          var lastCompoundedAt = Time.now();
+        };
+        accounts.put(p, a);
+        a;
+      };
+    };
+  };
+
+  func compoundAccount(a : Account) {
+    let now = Time.now();
+    let elapsedS : Int = (now - a.lastCompoundedAt) / 1_000_000_000;
+    if (elapsedS > 0) {
+      a.balance := a.balance * (perSecondRate ** Float.fromInt(elapsedS));
+      a.lastCompoundedAt := now;
+    };
+  };
+
+  public shared (msg) func topUp(amount : Float) : async () {
+    requireAuthed(msg.caller);
+    let a = getOrCreate(msg.caller);
+    compoundAccount(a);
     if (amount > networkFee) {
-      currentValue += (amount - networkFee);
-      Debug.print(debug_show (currentValue));
+      a.balance += (amount - networkFee);
     } else {
       Debug.print("Amount must be greater than network fee");
     };
   };
 
-  public func withdraw(amount : Float) {
+  public shared (msg) func withdraw(amount : Float) : async () {
+    requireAuthed(msg.caller);
+    let a = getOrCreate(msg.caller);
+    compoundAccount(a);
     let totalWithFee = amount + withdrawalFee;
-    if (currentValue < totalWithFee) {
+    if (a.balance < totalWithFee) {
       Debug.print("Insufficient funds including fee");
     } else {
-      currentValue -= totalWithFee;
-      Debug.print(debug_show (currentValue));
+      a.balance -= totalWithFee;
     };
   };
 
-  public query func checkBalance() : async Float {
-    return currentValue;
+  public shared query (msg) func checkBalance() : async Float {
+    requireAuthed(msg.caller);
+    switch (accounts.get(msg.caller)) {
+      case (?a) a.balance;
+      case null 0.0;
+    };
   };
 
-  public func getID() : async Nat {
-    return id;
+  public shared (msg) func compound() : async () {
+    requireAuthed(msg.caller);
+    let a = getOrCreate(msg.caller);
+    compoundAccount(a);
   };
 
-  public func compound() {
-    let currentTime = Time.now();
-    let timeElapsedNS = currentTime - startTime;
-    let timeElapsedS = timeElapsedNS / 1000000000;
-
-    // Calculate rate that compounds to exactly 1% daily
-    // 1.01 = target daily multiplier (1% increase)
-    // 1/86400 = one second as fraction of a day
-    // (1.01 ^ (1/86400)) = per-second rate for 1% daily
-    let perSecondRate = 1.01 ** (1.0 / 86400.0);
-    currentValue := currentValue * (perSecondRate ** Float.fromInt(timeElapsedS));
-    startTime := currentTime;
-  };
-
-  public query func greet(name : Text) : async Text {
-    return "Hello, " # name # "!";
+  public query func getID() : async Nat {
+    234902384;
   };
 };
