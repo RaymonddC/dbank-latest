@@ -5,16 +5,24 @@ import { Button } from '@/components/ui/button';
 const ThemeToggle = () => {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
-  // Check for user's preferred theme
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null;
-    if (savedTheme) {
-      setTheme(savedTheme);
-      document.documentElement.classList.toggle('dark', savedTheme === 'dark');
-    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      setTheme('dark');
-      document.documentElement.classList.add('dark');
-    }
+    const saved = localStorage.getItem('theme') as 'light' | 'dark' | null;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const apply = (next: 'light' | 'dark') => {
+      setTheme(next);
+      document.documentElement.classList.toggle('dark', next === 'dark');
+    };
+
+    apply(saved ?? (media.matches ? 'dark' : 'light'));
+
+    // If the user hasn't explicitly chosen a theme, follow OS changes live.
+    const onChange = (e: MediaQueryListEvent) => {
+      if (localStorage.getItem('theme') === null) {
+        apply(e.matches ? 'dark' : 'light');
+      }
+    };
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
   }, []);
 
   const toggleTheme = () => {
