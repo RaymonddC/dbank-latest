@@ -4,9 +4,11 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Upload, Download, ArrowRight, Lock } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLiveBalance } from '@/hooks/useLiveBalance';
 import { icpToE8s, e8sToIcp, formatIcp } from '@/lib/icp';
 import WalletButton from './WalletButton';
 import TransactionHistory from './TransactionHistory';
@@ -20,10 +22,14 @@ const TransactionCard = () => {
   const queryClient = useQueryClient();
 
   const [balance, setBalance] = useState<bigint>(0n);
+  const [balanceAnchor, setBalanceAnchor] = useState<number>(Date.now());
+  const [balanceLoaded, setBalanceLoaded] = useState<boolean>(false);
   const [amount, setAmount] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<string>('topup');
   const [refreshTick, setRefreshTick] = useState(0);
+
+  const liveBalance = useLiveBalance(balance, balanceAnchor);
 
   const feesQuery = useQuery({
     queryKey: ['fees', principal?.toText() ?? 'anonymous'],
@@ -42,6 +48,7 @@ const TransactionCard = () => {
   useEffect(() => {
     if (!dbank || !isAuthenticated) {
       setBalance(0n);
+      setBalanceLoaded(false);
       return;
     }
     let cancelled = false;
@@ -51,6 +58,8 @@ const TransactionCard = () => {
         const current = await dbank.checkBalance();
         if (cancelled) return;
         setBalance(current);
+        setBalanceAnchor(Date.now());
+        setBalanceLoaded(true);
       } catch (error) {
         if (cancelled) return;
         toast.error('Could not fetch balance', { description: errorMessage(error) });
@@ -79,6 +88,16 @@ const TransactionCard = () => {
       return;
     }
 
+    // Optimistic update so the balance + button feedback feels instant.
+    const optimistic =
+      type === 'top-up'
+        ? balance + amountE8s - fees.networkFee
+        : balance - amountE8s - fees.withdrawalFee;
+    const previousBalance = balance;
+    const previousAnchor = balanceAnchor;
+    setBalance(optimistic < 0n ? 0n : optimistic);
+    setBalanceAnchor(Date.now());
+
     setLoading(true);
     try {
       const result =
@@ -87,6 +106,9 @@ const TransactionCard = () => {
           : await dbank.withdraw(amountE8s);
 
       if ('err' in result) {
+        // Roll back optimistic state.
+        setBalance(previousBalance);
+        setBalanceAnchor(previousAnchor);
         toast.error(`${type === 'top-up' ? 'Top-up' : 'Withdrawal'} failed`, {
           description: describeTransferError(result.err),
         });
@@ -97,11 +119,19 @@ const TransactionCard = () => {
       setRefreshTick((t) => t + 1);
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
     } catch (error) {
+      setBalance(previousBalance);
+      setBalanceAnchor(previousAnchor);
       toast.error(`${type === 'top-up' ? 'Top-up' : 'Withdrawal'} failed`, { description: errorMessage(error) });
     } finally {
       setLoading(false);
     }
   };
+
+  const balanceLabel = balanceLoaded ? (
+    <span className="font-mono">{formatIcp(liveBalance, 4)} ICP</span>
+  ) : (
+    <Skeleton className="inline-block h-4 w-20 align-middle" />
+  );
 
   if (isReady && !isAuthenticated) {
     return (
@@ -174,7 +204,7 @@ const TransactionCard = () => {
                   </div>
                   <div id="topup-fees" className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
                     <span>Network Fee: {networkFeeIcp} ICP</span>
-                    <span>Balance: {formatIcp(balance, 4)} ICP</span>
+                    <span>Balance: {balanceLabel}</span>
                   </div>
                 </div>
                 <Button
@@ -223,7 +253,7 @@ const TransactionCard = () => {
                   </div>
                   <div id="withdraw-fees" className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
                     <span>Withdrawal Fee: {withdrawalFeeIcp} ICP</span>
-                    <span>Available: {formatIcp(balance, 4)} ICP</span>
+                    <span>Available: {balanceLabel}</span>
                   </div>
                 </div>
                 <Button

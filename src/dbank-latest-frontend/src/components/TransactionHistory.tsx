@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ArrowDownToLine, ArrowUpFromLine, Clock } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatIcp } from '@/lib/icp';
 
@@ -34,7 +35,20 @@ const TransactionHistory = () => {
       </CardHeader>
       <CardContent>
         {txQuery.isLoading ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p>
+          <ul className="divide-y divide-slate-200 dark:divide-slate-800" aria-busy>
+            {[0, 1, 2].map((i) => (
+              <li key={i} className="flex items-center justify-between py-3">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-8 w-8 rounded-full" />
+                  <div className="flex flex-col gap-1">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-3 w-28" />
+                  </div>
+                </div>
+                <Skeleton className="h-4 w-24" />
+              </li>
+            ))}
+          </ul>
         ) : txs.length === 0 ? (
           <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <Clock className="h-4 w-4" aria-hidden />
