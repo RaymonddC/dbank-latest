@@ -31,13 +31,15 @@ class ErrorBoundary extends Component<Props, State> {
     if (this.props.fallback) return this.props.fallback(error, this.reset);
 
     return (
-      <div role="alert" className="min-h-screen flex items-center justify-center p-6 bg-slate-50 dark:bg-slate-950">
+      <div role="alert" className="min-h-screen flex items-center justify-center p-6 bg-background">
         <div className="max-w-md w-full text-center space-y-4">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
-            <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" aria-hidden />
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+            <AlertTriangle className="h-6 w-6 text-destructive" aria-hidden />
           </div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Something went wrong</h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400 break-words">{error.message || 'An unexpected error occurred.'}</p>
+          <h1 className="font-serif text-2xl text-foreground">Something went wrong</h1>
+          <p className="text-sm text-muted-foreground break-words">
+            {error.message || 'An unexpected error occurred.'}
+          </p>
           <Button onClick={this.reset}>Try again</Button>
         </div>
       </div>

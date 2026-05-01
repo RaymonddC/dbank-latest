@@ -9,10 +9,10 @@ const ConnectionBanner = () => {
     <div
       role="status"
       aria-live="polite"
-      className="fixed top-0 left-0 right-0 z-[60] bg-amber-500 text-amber-950 dark:bg-amber-600 dark:text-amber-50 shadow-md"
+      className="fixed top-0 left-0 right-0 z-[60] border-b border-destructive/30 bg-destructive/10 text-foreground backdrop-blur"
     >
-      <div className="container mx-auto px-4 py-2 flex items-center justify-center gap-2 text-sm font-medium">
-        <WifiOff className="h-4 w-4" aria-hidden />
+      <div className="container mx-auto px-4 py-2 flex items-center justify-center gap-2 text-sm">
+        <WifiOff className="h-4 w-4 text-destructive" aria-hidden />
         <span>Cannot reach the Internet Computer canister. Retrying…</span>
       </div>
     </div>

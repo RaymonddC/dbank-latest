@@ -28,65 +28,57 @@ const TransactionHistory = () => {
   const txs = (txQuery.data ?? []).slice().reverse().slice(0, 10);
 
   return (
-    <Card className="shadow-xl border-slate-200 dark:border-slate-700/50 glass-card">
-      <CardHeader>
-        <CardTitle className="text-lg">Recent Activity</CardTitle>
-        <CardDescription>Your last {txs.length || 'few'} transactions</CardDescription>
+    <Card>
+      <CardHeader className="space-y-1.5">
+        <CardTitle className="font-serif text-lg">Recent activity</CardTitle>
+        <CardDescription>Your most recent on-chain transactions.</CardDescription>
       </CardHeader>
       <CardContent>
         {txQuery.isLoading ? (
-          <ul className="divide-y divide-slate-200 dark:divide-slate-800" aria-busy>
+          <ul className="divide-y divide-border" aria-busy>
             {[0, 1, 2].map((i) => (
               <li key={i} className="flex items-center justify-between py-3">
                 <div className="flex items-center gap-3">
                   <Skeleton className="h-8 w-8 rounded-full" />
                   <div className="flex flex-col gap-1">
-                    <Skeleton className="h-4 w-20" />
-                    <Skeleton className="h-3 w-28" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-3 w-32" />
                   </div>
                 </div>
-                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-20" />
               </li>
             ))}
           </ul>
         ) : txs.length === 0 ? (
-          <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+          <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
             <Clock className="h-4 w-4" aria-hidden />
             <span>No transactions yet. Top up to get started.</span>
           </div>
         ) : (
-          <ul className="divide-y divide-slate-200 dark:divide-slate-800">
+          <ul className="divide-y divide-border">
             {txs.map((tx, i) => {
               const isTopUp = 'topUp' in tx.kind;
               return (
                 <li key={i} className="flex items-center justify-between py-3 text-sm">
                   <div className="flex items-center gap-3">
-                    <div
-                      className={
-                        isTopUp
-                          ? 'p-2 rounded-full bg-emerald-100 dark:bg-emerald-900/30'
-                          : 'p-2 rounded-full bg-amber-100 dark:bg-amber-900/30'
-                      }
-                    >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-foreground">
                       {isTopUp ? (
-                        <ArrowDownToLine className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden />
+                        <ArrowDownToLine className="h-4 w-4" aria-hidden />
                       ) : (
-                        <ArrowUpFromLine className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden />
+                        <ArrowUpFromLine className="h-4 w-4" aria-hidden />
                       )}
                     </div>
                     <div className="flex flex-col">
-                      <span className="font-medium text-slate-800 dark:text-slate-100">
-                        {isTopUp ? 'Top up' : 'Withdrawal'}
-                      </span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">{formatTimestamp(tx.timestamp)}</span>
+                      <span className="font-medium text-foreground">{isTopUp ? 'Top up' : 'Withdrawal'}</span>
+                      <span className="text-xs text-muted-foreground">{formatTimestamp(tx.timestamp)}</span>
                     </div>
                   </div>
                   <div className="flex flex-col items-end">
-                    <span className={isTopUp ? 'font-mono text-emerald-700 dark:text-emerald-300' : 'font-mono text-amber-700 dark:text-amber-300'}>
+                    <span className="font-mono text-foreground tabular-nums">
                       {isTopUp ? '+' : '−'}
                       {formatIcp(tx.amount)} ICP
                     </span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                    <span className="text-xs font-mono text-muted-foreground tabular-nums">
                       bal {formatIcp(tx.balanceAfter)}
                     </span>
                   </div>

@@ -8,17 +8,22 @@ import { InterestInfo } from '@/components/InterestInfo';
 
 const Index = () => {
   return (
-    <div className="min-h-screen flex flex-col bg-white dark:bg-slate-950 transition-colors duration-300">
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
       <Header />
 
       <main className="flex-grow">
         <Hero />
 
-        <section className="py-16 bg-white dark:bg-slate-900 relative overflow-hidden transition-colors duration-300">
+        <section className="py-24 border-t border-border">
           <div className="container mx-auto px-4">
-            <div className="text-center mb-12">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-icp-blue to-icp-teal dark:from-white dark:to-icp-darkTeal drop-shadow-sm">Interest Rates</h2>
-              <p className="text-xl text-slate-600 dark:text-slate-200 max-w-2xl mx-auto">Earn compound interest updated every second</p>
+            <div className="max-w-2xl mb-14">
+              <h2 className="font-serif text-3xl md:text-4xl font-medium tracking-tight text-foreground">
+                One percent. Every day.
+              </h2>
+              <p className="mt-3 text-lg text-muted-foreground">
+                Interest accrues every second using a per-second rate of{' '}
+                <span className="font-mono">1.01<sup>1/86400</sup></span>. The math compounds to exactly the headline rate.
+              </p>
             </div>
             <InterestInfo />
           </div>
@@ -26,14 +31,16 @@ const Index = () => {
 
         <Features />
 
-        <section id="transactions" className="py-20 bg-white dark:bg-slate-900 relative overflow-hidden transition-colors duration-300">
-          <div className="absolute top-0 right-0 w-full h-full bg-gradient-radial from-icp-purple/5 dark:from-icp-darkPurple/10 to-transparent opacity-70 -z-10"></div>
+        <section id="transactions" className="py-24 border-t border-border bg-secondary/40">
           <div className="container mx-auto px-4">
-            <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-icp-blue to-icp-teal dark:from-white dark:to-icp-darkTeal drop-shadow-sm">Start Your Transaction</h2>
-              <p className="text-xl text-slate-600 dark:text-slate-200 max-w-2xl mx-auto">Top up or withdraw from your ICP wallet in just a few clicks</p>
+            <div className="max-w-2xl mb-14">
+              <h2 className="font-serif text-3xl md:text-4xl font-medium tracking-tight text-foreground">
+                Move ICP in or out.
+              </h2>
+              <p className="mt-3 text-lg text-muted-foreground">
+                Sign in once, then top up and withdraw freely. Each action is signed by your principal and recorded on-chain.
+              </p>
             </div>
-
             <TransactionCard />
           </div>
         </section>

@@ -24,8 +24,6 @@ const WalletButton = ({ fullWidth = false, onAction }: WalletButtonProps) => {
   const { isAuthenticated, isReady, principal, login, logout } = useAuth();
   const [busy, setBusy] = useState(false);
 
-  const sharedClasses =
-    'relative bg-gradient-to-r from-icp-blue via-icp-teal to-icp-blue bg-[size:200%_100%] bg-right-bottom hover:bg-left-bottom text-white font-medium shadow-md hover:shadow-lg transition-[background-position] duration-500 ease-in-out';
   const widthClass = fullWidth ? 'w-full' : '';
 
   const handleLogin = async () => {
@@ -34,7 +32,6 @@ const WalletButton = ({ fullWidth = false, onAction }: WalletButtonProps) => {
       await login();
       onAction?.();
     } catch (err) {
-      // User cancelling the II window also rejects — only surface if it looks like a real error.
       const message = err instanceof Error ? err.message : String(err);
       if (message && !/cancel|abort|closed/i.test(message)) {
         toast.error('Sign-in failed', { description: message });
@@ -58,7 +55,7 @@ const WalletButton = ({ fullWidth = false, onAction }: WalletButtonProps) => {
 
   if (!isReady) {
     return (
-      <Button className={`${widthClass} ${sharedClasses}`} disabled aria-busy>
+      <Button className={widthClass} disabled aria-busy>
         Loading…
       </Button>
     );
@@ -67,13 +64,13 @@ const WalletButton = ({ fullWidth = false, onAction }: WalletButtonProps) => {
   if (!isAuthenticated || !principal) {
     return (
       <Button
-        className={`${widthClass} ${sharedClasses} group`}
+        className={`${widthClass} group`}
         onClick={handleLogin}
         disabled={busy}
         aria-label="Connect with Internet Identity"
       >
         {busy ? 'Connecting…' : 'Connect Wallet'}
-        <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" aria-hidden />
+        <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
       </Button>
     );
   }
@@ -84,27 +81,25 @@ const WalletButton = ({ fullWidth = false, onAction }: WalletButtonProps) => {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          className={`${widthClass} ${sharedClasses}`}
+          variant="outline"
+          className={`${widthClass} font-mono text-sm`}
           aria-label={`Wallet menu for ${principalText}`}
           disabled={busy}
         >
+          <span className="h-2 w-2 rounded-full bg-emerald-500 mr-2" aria-hidden />
           {truncate(principalText)}
-          <ChevronDown className="ml-2 h-4 w-4" aria-hidden />
+          <ChevronDown className="ml-2 h-4 w-4 opacity-60" aria-hidden />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
+      <DropdownMenuContent align="end" className="w-72">
         <DropdownMenuLabel className="font-normal">
-          <div className="flex flex-col">
-            <span className="text-xs text-slate-500 dark:text-slate-400">Signed in as</span>
-            <span className="break-all text-xs font-mono">{principalText}</span>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">Signed in as</span>
+            <span className="break-all text-xs font-mono text-foreground">{principalText}</span>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          className="cursor-pointer"
-          onClick={handleLogout}
-          disabled={busy}
-        >
+        <DropdownMenuItem className="cursor-pointer" onClick={handleLogout} disabled={busy}>
           <LogOut className="mr-2 h-4 w-4" aria-hidden />
           Disconnect
         </DropdownMenuItem>
