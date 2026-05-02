@@ -47,12 +47,18 @@ jobs:
           EOF
           cat > src/declarations/dbank-latest-backend/dbank-latest-backend.did.d.ts <<'EOF'
           import type { Principal } from '@icp-sdk/core/principal';
+          export interface LedgerAccount {
+            owner: Principal;
+            subaccount: [Uint8Array] | [];
+          }
           export interface _SERVICE {
             checkBalance: () => Promise<bigint>;
             compound: () => Promise<void>;
             getFees: () => Promise<{ networkFee: bigint; withdrawalFee: bigint }>;
             getLimits: () => Promise<{ maxTxAmount: bigint; maxTxLog: bigint; minOpIntervalNs: bigint }>;
             getTransactions: () => Promise<unknown[]>;
+            getDepositAccount: () => Promise<LedgerAccount>;
+            getLedgerCanister: () => Promise<Principal>;
             topUp: (amount: bigint) => Promise<{ ok: null } | { err: unknown }>;
             withdraw: (amount: bigint) => Promise<{ ok: null } | { err: unknown }>;
           }

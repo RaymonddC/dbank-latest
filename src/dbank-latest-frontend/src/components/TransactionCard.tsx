@@ -13,6 +13,7 @@ import { icpToE8s, e8sToIcp, formatIcp } from '@/lib/icp';
 import { describeTransferError, errorMessage } from '@/lib/transferErrors';
 import WalletButton from './WalletButton';
 import TransactionHistory from './TransactionHistory';
+import DepositAddress from './DepositAddress';
 
 const FALLBACK_FEES = { networkFee: 50_000n, withdrawalFee: 100_000n };
 
@@ -286,6 +287,7 @@ const TransactionCard = () => {
         </CardFooter>
       </Card>
 
+      <DepositAddress />
       <TransactionHistory />
     </div>
   );

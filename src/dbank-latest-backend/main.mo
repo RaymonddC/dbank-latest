@@ -1,43 +1,54 @@
+import Array "mo:base/Array";
+import Blob "mo:base/Blob";
 import Buffer "mo:base/Buffer";
 import Float "mo:base/Float";
 import Int "mo:base/Int";
+import Nat8 "mo:base/Nat8";
 import Principal "mo:base/Principal";
 import Time "mo:base/Time";
 import TrieMap "mo:base/TrieMap";
 
-actor DBank {
-  // 1 ICP = 100_000_000 e8s. All on-chain amounts are Nat e8s.
+// PR11.1: actor class so we can pass the ICP ledger canister id at deploy
+// time. Omit the arg (or pass `(null)`) to use mainnet's ledger;
+// pass `(opt record { ledger = principal "<id>" })` for local dev.
+actor class DBank(initArgs : ?{ ledger : Principal }) = self {
+
+  // ─── Constants ───────────────────────────────────────────────────────────
   let E8S_PER_ICP : Nat = 100_000_000;
   let networkFee : Nat = 50_000;       // 0.0005 ICP
   let withdrawalFee : Nat = 100_000;   // 0.001  ICP
 
-  // Per-second rate that compounds to exactly 1% daily: 1.01 ^ (1/86400).
   let perSecondRate : Float = 1.01 ** (1.0 / 86400.0);
-
-  // Cap a single compound step to one year — past that the Float math
-  // would overflow toward Inf and Float.toInt would trap. If a wallet is
-  // dormant for years the next interaction credits one year of interest;
-  // subsequent calls catch up.
   let MAX_COMPOUND_ELAPSED_S : Int = 31_536_000;
-
-  // Per-principal transaction log size cap. Older entries are evicted.
   let MAX_TX_LOG : Nat = 100;
-
-  // Minimum interval between any two ops from the same principal (anti-spam).
-  let MIN_OP_INTERVAL_NS : Int = 100_000_000; // 100 ms
-
-  // Hard ceiling on a single tx amount: 1B ICP. Anything larger is clearly
-  // hostile or a bug, and capping prevents Float-precision oddities.
+  let MIN_OP_INTERVAL_NS : Int = 100_000_000;
   let MAX_TX_AMOUNT : Nat = 1_000_000_000 * E8S_PER_ICP;
 
+  // Mainnet ICP ledger when no init arg is supplied.
+  let mainnetLedgerPrincipal : Principal = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
+
+  let ledgerPrincipal : Principal = switch (initArgs) {
+    case (?args) args.ledger;
+    case null mainnetLedgerPrincipal;
+  };
+
+  // ─── ICRC-1 types ────────────────────────────────────────────────────────
+  public type Subaccount = [Nat8];
+
+  public type LedgerAccount = {
+    owner : Principal;
+    subaccount : ?Subaccount;
+  };
+
+  // ─── App types (unchanged from PR9) ─────────────────────────────────────
   public type TransactionKind = { #topUp; #withdraw };
 
   public type Transaction = {
     kind : TransactionKind;
-    amount : Nat;       // e8s
-    fee : Nat;          // e8s
-    balanceAfter : Nat; // e8s
-    timestamp : Int;    // nanoseconds since epoch
+    amount : Nat;
+    fee : Nat;
+    balanceAfter : Nat;
+    timestamp : Int;
   };
 
   public type TransferError = {
@@ -116,16 +127,12 @@ actor DBank {
     };
   };
 
-  // Returns the time the caller must wait before another op, or 0 if free.
   func rateLimitWait(a : Account) : Int {
     let now = Time.now();
     let next = a.lastOpAt + MIN_OP_INTERVAL_NS;
     if (now >= next) 0 else (next - now);
   };
 
-  // Compound the account's balance by the time elapsed since lastCompoundedAt.
-  // Float math is used internally; the result is rounded back to Nat e8s.
-  // Caps elapsed to MAX_COMPOUND_ELAPSED_S to prevent Float overflow.
   func compoundAccount(a : Account) {
     let now = Time.now();
     let rawElapsed : Int = (now - a.lastCompoundedAt) / 1_000_000_000;
@@ -134,8 +141,6 @@ actor DBank {
       let asFloat = Float.fromInt(a.balance);
       let multiplied = asFloat * (perSecondRate ** Float.fromInt(elapsedS));
       a.balance := Int.abs(Float.toInt(multiplied));
-      // Advance the anchor only by the time we actually credited; the next
-      // call will pick up the remainder if rawElapsed was capped.
       a.lastCompoundedAt += elapsedS * 1_000_000_000;
     } else if (rawElapsed > 0) {
       a.lastCompoundedAt := now;
@@ -156,6 +161,18 @@ actor DBank {
     a.lastOpAt := Time.now();
   };
 
+  // ─── Subaccount derivation (PR11.1) ─────────────────────────────────────
+  // Zero-pad the caller's principal blob to 32 bytes. Deterministic and
+  // reversible; matches the convention used by NNS-Dapp and OISY for
+  // subaccount-per-user designs.
+  func subaccountFor(user : Principal) : Subaccount {
+    let bytes = Blob.toArray(Principal.toBlob(user));
+    Array.tabulate<Nat8>(32, func(i) {
+      if (i < bytes.size()) bytes[i] else (0 : Nat8);
+    });
+  };
+
+  // ─── App methods (PR9 set, unchanged) ───────────────────────────────────
   public shared (msg) func topUp(amount : Nat) : async Result<(), TransferError> {
     requireAuthed(msg.caller);
     if (amount == 0) return #err(#invalidAmount);
@@ -225,4 +242,21 @@ actor DBank {
     };
   };
 
+  // ─── Ledger introspection (new in PR11.1) ───────────────────────────────
+  // Returns the ICRC-1 account where this user should send ICP to top up.
+  // Owner is the dbank canister's principal; subaccount is derived from the
+  // caller's principal so funds remain segregated per user.
+  public shared query (msg) func getDepositAccount() : async LedgerAccount {
+    requireAuthed(msg.caller);
+    {
+      owner = Principal.fromActor(self);
+      subaccount = ?subaccountFor(msg.caller);
+    };
+  };
+
+  // Echoes back the configured ledger canister so the frontend / explorers
+  // can verify which ledger this canister speaks to.
+  public query func getLedgerCanister() : async Principal {
+    ledgerPrincipal;
+  };
 };
