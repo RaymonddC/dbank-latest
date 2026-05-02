@@ -40,9 +40,37 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     subaccount : ?Subaccount;
   };
 
+  // ICRC-1 transfer types.
+  public type TransferLedgerError = {
+    #BadFee : { expected_fee : Nat };
+    #BadBurn : { min_burn_amount : Nat };
+    #InsufficientFunds : { balance : Nat };
+    #TooOld;
+    #CreatedInFuture : { ledger_time : Nat64 };
+    #Duplicate : { duplicate_of : Nat };
+    #TemporarilyUnavailable;
+    #GenericError : { error_code : Nat; message : Text };
+  };
+
+  public type TransferArgs = {
+    from_subaccount : ?Subaccount;
+    to : LedgerAccount;
+    amount : Nat;
+    fee : ?Nat;
+    memo : ?[Nat8];
+    created_at_time : ?Nat64;
+  };
+
+  public type LedgerTransferResult = {
+    #Ok : Nat;
+    #Err : TransferLedgerError;
+  };
+
   // Minimal ICRC-1 ledger interface — just the calls dbank needs.
   type Ledger = actor {
     icrc1_balance_of : (LedgerAccount) -> async Nat;
+    icrc1_fee : () -> async Nat;
+    icrc1_transfer : (TransferArgs) -> async LedgerTransferResult;
   };
 
   let ledger : Ledger = actor (Principal.toText(ledgerPrincipal));
@@ -64,6 +92,8 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     #belowFee : { fee : Nat };
     #insufficientFunds : { balance : Nat; required : Nat };
     #rateLimited : { retryAfterNs : Int };
+    #ledgerError : TransferLedgerError;
+    #ledgerUnreachable : { message : Text };
   };
 
   public type Result<T, E> = { #ok : T; #err : E };
@@ -199,21 +229,71 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     #ok(());
   };
 
-  public shared (msg) func withdraw(amount : Nat) : async Result<(), TransferError> {
+  // PR11.3: real withdraw via icrc1_transfer.
+  //
+  // Race-condition note: a concurrent notifyDeposit could otherwise see
+  // (onLedger - lastSeen) and credit the user with the in-flight outgoing
+  // transfer. We pre-decrement `lastSeenLedgerBalance` *before* the await
+  // so the in-flight transfer never looks like a deposit. If the transfer
+  // fails, we restore lastSeen and refund internal balance.
+  public shared (msg) func withdraw(amount : Nat, dest : LedgerAccount) : async Result<Nat, TransferError> {
     requireAuthed(msg.caller);
     if (amount == 0) return #err(#invalidAmount);
     if (amount > MAX_TX_AMOUNT) return #err(#amountTooLarge({ max = MAX_TX_AMOUNT }));
+
     let a = getOrCreate(msg.caller);
     let wait = rateLimitWait(a);
     if (wait > 0) return #err(#rateLimited({ retryAfterNs = wait }));
+
     compoundAccount(a);
-    let required = amount + withdrawalFee;
-    if (a.balance < required) {
-      return #err(#insufficientFunds({ balance = a.balance; required }));
+
+    let ledgerFee : Nat = try {
+      await ledger.icrc1_fee();
+    } catch (err) {
+      return #err(#ledgerUnreachable({ message = debug_show err }));
     };
-    a.balance -= required;
-    recordTx(a, #withdraw, amount, withdrawalFee);
-    #ok(());
+
+    let totalNeeded = amount + ledgerFee;
+    if (a.balance < totalNeeded) {
+      return #err(#insufficientFunds({ balance = a.balance; required = totalNeeded }));
+    };
+
+    // Reserve before the transfer call.
+    a.balance -= totalNeeded;
+    let prevLastSeen = a.lastSeenLedgerBalance;
+    a.lastSeenLedgerBalance := if (a.lastSeenLedgerBalance >= totalNeeded) {
+      a.lastSeenLedgerBalance - totalNeeded;
+    } else { 0 };
+    a.lastOpAt := Time.now();
+
+    let result : LedgerTransferResult = try {
+      await ledger.icrc1_transfer({
+        from_subaccount = ?subaccountFor(msg.caller);
+        to = dest;
+        amount;
+        fee = ?ledgerFee;
+        memo = null;
+        created_at_time = null;
+      });
+    } catch (err) {
+      // Inter-canister call failed at the system level; refund.
+      a.balance += totalNeeded;
+      a.lastSeenLedgerBalance := prevLastSeen;
+      return #err(#ledgerUnreachable({ message = debug_show err }));
+    };
+
+    switch (result) {
+      case (#Ok blockIndex) {
+        recordTx(a, #withdraw, amount, ledgerFee);
+        #ok(blockIndex);
+      };
+      case (#Err err) {
+        // Ledger rejected (BadFee, InsufficientFunds, etc). Refund.
+        a.balance += totalNeeded;
+        a.lastSeenLedgerBalance := prevLastSeen;
+        #err(#ledgerError(err));
+      };
+    };
   };
 
   public shared query (msg) func checkBalance() : async Nat {

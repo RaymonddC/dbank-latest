@@ -38,6 +38,56 @@ describe('describeTransferError', () => {
     expect(describeTransferError(null)).toBe('Transfer failed');
     expect(describeTransferError(42)).toBe('Transfer failed');
   });
+
+  it('handles ledgerUnreachable', () => {
+    const msg = describeTransferError({ ledgerUnreachable: { message: 'agent error: 502' } });
+    expect(msg).toContain('Ledger unreachable');
+    expect(msg).toContain('502');
+  });
+
+  describe('ledgerError variants', () => {
+    it('BadFee surfaces the expected fee', () => {
+      const msg = describeTransferError({ ledgerError: { BadFee: { expected_fee: 10_000n } } });
+      expect(msg).toMatch(/Bad ledger fee/);
+      expect(msg).toContain('0.0001');
+    });
+
+    it('InsufficientFunds surfaces the on-ledger balance', () => {
+      const msg = describeTransferError({ ledgerError: { InsufficientFunds: { balance: 50_000n } } });
+      expect(msg).toMatch(/insufficient funds/i);
+      expect(msg).toContain('0.0005');
+    });
+
+    it('TooOld', () => {
+      expect(describeTransferError({ ledgerError: { TooOld: null } })).toMatch(/too old/);
+    });
+
+    it('CreatedInFuture', () => {
+      expect(
+        describeTransferError({ ledgerError: { CreatedInFuture: { ledger_time: 0n } } }),
+      ).toMatch(/future/);
+    });
+
+    it('Duplicate references the original block', () => {
+      const msg = describeTransferError({ ledgerError: { Duplicate: { duplicate_of: 12345n } } });
+      expect(msg).toMatch(/Duplicate/);
+      expect(msg).toContain('12345');
+    });
+
+    it('TemporarilyUnavailable', () => {
+      expect(
+        describeTransferError({ ledgerError: { TemporarilyUnavailable: null } }),
+      ).toMatch(/temporarily unavailable/i);
+    });
+
+    it('GenericError surfaces code and message', () => {
+      const msg = describeTransferError({
+        ledgerError: { GenericError: { error_code: 7n, message: 'whoops' } },
+      });
+      expect(msg).toMatch(/Ledger error 7/);
+      expect(msg).toContain('whoops');
+    });
+  });
 });
 
 describe('errorMessage', () => {

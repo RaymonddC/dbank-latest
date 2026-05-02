@@ -10,14 +10,13 @@ import { Upload, Download, ArrowRight, Lock } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLiveBalance } from '@/hooks/useLiveBalance';
 import { icpToE8s, e8sToIcp, formatIcp } from '@/lib/icp';
+import { decodeIcrc1Account } from '@/lib/icrc1';
 import { describeTransferError, errorMessage } from '@/lib/transferErrors';
 import WalletButton from './WalletButton';
 import TransactionHistory from './TransactionHistory';
 import DepositAddress from './DepositAddress';
 
 const FALLBACK_FEES = { networkFee: 50_000n, withdrawalFee: 100_000n };
-
-type TxType = 'top-up' | 'withdrawal';
 
 const TransactionCard = () => {
   const { actor: dbank, isAuthenticated, isReady, principal } = useAuth();
@@ -26,7 +25,9 @@ const TransactionCard = () => {
   const [balance, setBalance] = useState<bigint>(0n);
   const [balanceAnchor, setBalanceAnchor] = useState<number>(Date.now());
   const [balanceLoaded, setBalanceLoaded] = useState<boolean>(false);
-  const [amount, setAmount] = useState<string>('');
+  const [topupAmount, setTopupAmount] = useState<string>('');
+  const [withdrawAmount, setWithdrawAmount] = useState<string>('');
+  const [destination, setDestination] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -44,7 +45,6 @@ const TransactionCard = () => {
 
   const fees = feesQuery.data ?? FALLBACK_FEES;
   const networkFeeIcp = e8sToIcp(fees.networkFee);
-  const withdrawalFeeIcp = e8sToIcp(fees.withdrawalFee);
 
   useEffect(() => {
     if (!dbank || !isAuthenticated) {
@@ -71,56 +71,108 @@ const TransactionCard = () => {
     };
   }, [dbank, isAuthenticated, refreshTick]);
 
-  const handleSubmit = async (e: React.FormEvent, type: TxType) => {
+  const handleTopUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!dbank) return;
-    const parsedAmount = parseFloat(amount);
-
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+    const parsed = parseFloat(topupAmount);
+    if (isNaN(parsed) || parsed <= 0) {
       toast.error('Enter a positive amount');
       return;
     }
 
     let amountE8s: bigint;
     try {
-      amountE8s = icpToE8s(parsedAmount);
+      amountE8s = icpToE8s(parsed);
     } catch (err) {
       toast.error(errorMessage(err));
       return;
     }
 
-    const optimistic =
-      type === 'top-up'
-        ? balance + amountE8s - fees.networkFee
-        : balance - amountE8s - fees.withdrawalFee;
     const previousBalance = balance;
     const previousAnchor = balanceAnchor;
-    setBalance(optimistic < 0n ? 0n : optimistic);
+    setBalance(balance + amountE8s - fees.networkFee);
     setBalanceAnchor(Date.now());
 
     setLoading(true);
     try {
-      const result =
-        type === 'top-up'
-          ? await dbank.topUp(amountE8s)
-          : await dbank.withdraw(amountE8s);
-
+      const result = await dbank.topUp(amountE8s);
       if ('err' in result) {
         setBalance(previousBalance);
         setBalanceAnchor(previousAnchor);
-        toast.error(`${type === 'top-up' ? 'Top-up' : 'Withdrawal'} failed`, {
-          description: describeTransferError(result.err),
-        });
+        toast.error('Top-up failed', { description: describeTransferError(result.err) });
         return;
       }
-      toast.success(`${type === 'top-up' ? 'Topped up' : 'Withdrew'} ${parsedAmount} ICP`);
-      setAmount('');
+      toast.success(`Topped up ${parsed} ICP`);
+      setTopupAmount('');
       setRefreshTick((t) => t + 1);
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
     } catch (error) {
       setBalance(previousBalance);
       setBalanceAnchor(previousAnchor);
-      toast.error(`${type === 'top-up' ? 'Top-up' : 'Withdrawal'} failed`, { description: errorMessage(error) });
+      toast.error('Top-up failed', { description: errorMessage(error) });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleWithdraw = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dbank) return;
+
+    const parsed = parseFloat(withdrawAmount);
+    if (isNaN(parsed) || parsed <= 0) {
+      toast.error('Enter a positive amount');
+      return;
+    }
+
+    let amountE8s: bigint;
+    try {
+      amountE8s = icpToE8s(parsed);
+    } catch (err) {
+      toast.error(errorMessage(err));
+      return;
+    }
+
+    let dest;
+    try {
+      const parsedAcc = decodeIcrc1Account(destination.trim());
+      dest = {
+        owner: parsedAcc.owner,
+        subaccount: parsedAcc.subaccount ? ([parsedAcc.subaccount] as [Uint8Array]) : ([] as []),
+      };
+    } catch (err) {
+      toast.error('Invalid destination address', { description: errorMessage(err) });
+      return;
+    }
+
+    const previousBalance = balance;
+    const previousAnchor = balanceAnchor;
+    // Optimistic deduction (uses an estimate of the ledger fee — actual fee
+    // returned from the backend may differ marginally).
+    const optimisticDeduction = amountE8s + 10_000n;
+    setBalance(balance >= optimisticDeduction ? balance - optimisticDeduction : 0n);
+    setBalanceAnchor(Date.now());
+
+    setLoading(true);
+    try {
+      const result = await dbank.withdraw(amountE8s, dest);
+      if ('err' in result) {
+        setBalance(previousBalance);
+        setBalanceAnchor(previousAnchor);
+        toast.error('Withdrawal failed', { description: describeTransferError(result.err) });
+        return;
+      }
+      toast.success(`Withdrew ${parsed} ICP`, {
+        description: `Ledger block index ${result.ok.toString()}`,
+      });
+      setWithdrawAmount('');
+      setDestination('');
+      setRefreshTick((t) => t + 1);
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    } catch (error) {
+      setBalance(previousBalance);
+      setBalanceAnchor(previousAnchor);
+      toast.error('Withdrawal failed', { description: errorMessage(error) });
     } finally {
       setLoading(false);
     }
@@ -141,7 +193,7 @@ const TransactionCard = () => {
           </div>
           <CardTitle className="font-serif text-2xl">Sign in to manage your wallet</CardTitle>
           <CardDescription className="max-w-sm">
-            Connect with Internet Identity to top up, withdraw, and earn 1% daily compounding interest on your balance.
+            Connect with Internet Identity to deposit, withdraw, and earn 1% daily compounding interest on your balance.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center pb-8">
@@ -178,7 +230,7 @@ const TransactionCard = () => {
               <CardDescription>Add ICP to start earning compound interest immediately.</CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={(e) => handleSubmit(e, 'top-up')} aria-busy={loading}>
+              <form onSubmit={handleTopUp} aria-busy={loading}>
                 <div className="grid gap-4">
                   <div className="grid gap-2">
                     <label htmlFor="topup-amount" className="text-sm font-medium text-foreground">
@@ -190,8 +242,8 @@ const TransactionCard = () => {
                         placeholder="0.00"
                         type="number"
                         inputMode="decimal"
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
+                        value={topupAmount}
+                        onChange={(e) => setTopupAmount(e.target.value)}
                         className="pr-12"
                         step="0.001"
                         min="0"
@@ -229,12 +281,30 @@ const TransactionCard = () => {
 
           <TabsContent value="withdraw" className="m-0">
             <CardHeader className="space-y-2">
-              <CardTitle className="font-serif text-xl">Withdraw to your account</CardTitle>
-              <CardDescription>Transfer ICP from your on-chain wallet.</CardDescription>
+              <CardTitle className="font-serif text-xl">Withdraw to an account</CardTitle>
+              <CardDescription>Transfer ICP via the ledger to any ICRC-1 account.</CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={(e) => handleSubmit(e, 'withdrawal')} aria-busy={loading}>
+              <form onSubmit={handleWithdraw} aria-busy={loading}>
                 <div className="grid gap-4">
+                  <div className="grid gap-2">
+                    <label htmlFor="withdrawal-destination" className="text-sm font-medium text-foreground">
+                      Destination (ICRC-1 account)
+                    </label>
+                    <Input
+                      id="withdrawal-destination"
+                      placeholder="aaaaa-aa or aaaaa-aa-xxxxxxxx.1"
+                      type="text"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      value={destination}
+                      onChange={(e) => setDestination(e.target.value)}
+                      className="font-mono text-xs"
+                      required
+                      disabled={loading}
+                    />
+                  </div>
                   <div className="grid gap-2">
                     <label htmlFor="withdrawal-amount" className="text-sm font-medium text-foreground">
                       Amount
@@ -245,8 +315,8 @@ const TransactionCard = () => {
                         placeholder="0.00"
                         type="number"
                         inputMode="decimal"
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
+                        value={withdrawAmount}
+                        onChange={(e) => setWithdrawAmount(e.target.value)}
                         className="pr-12"
                         step="0.001"
                         min="0"
@@ -261,8 +331,8 @@ const TransactionCard = () => {
                   </div>
                   <dl id="withdraw-fees" className="flex justify-between text-xs text-muted-foreground">
                     <div>
-                      <dt className="sr-only">Withdrawal fee</dt>
-                      <dd>Withdrawal fee {withdrawalFeeIcp} ICP</dd>
+                      <dt className="sr-only">Ledger fee</dt>
+                      <dd>Ledger fee charged at submit</dd>
                     </div>
                     <div>
                       <dt className="sr-only">Available</dt>
@@ -283,7 +353,7 @@ const TransactionCard = () => {
           </TabsContent>
         </Tabs>
         <CardFooter className="border-t border-border px-6 py-4 text-xs text-muted-foreground">
-          Signed by Internet Identity. All transfers are on-chain.
+          Signed by Internet Identity. Withdrawals settle on the ICP ledger.
         </CardFooter>
       </Card>
 

@@ -61,7 +61,7 @@ jobs:
             getLedgerCanister: () => Promise<Principal>;
             notifyDeposit: () => Promise<{ ok: bigint } | { err: unknown }>;
             topUp: (amount: bigint) => Promise<{ ok: null } | { err: unknown }>;
-            withdraw: (amount: bigint) => Promise<{ ok: null } | { err: unknown }>;
+            withdraw: (amount: bigint, dest: LedgerAccount) => Promise<{ ok: bigint } | { err: unknown }>;
           }
           export type Principal = import('@icp-sdk/core/principal').Principal;
           EOF
