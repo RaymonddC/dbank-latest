@@ -24,6 +24,15 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
   let MIN_OP_INTERVAL_NS : Int = 100_000_000;
   let MAX_TX_AMOUNT : Nat = 1_000_000_000 * E8S_PER_ICP;
 
+  // PR11.4: with real ledger custody, the simulated 1%-daily interest
+  // assumed every internal e8s was an unbacked claim that grew "for free".
+  // That breaks once balances are 1:1 claims on real ICP held in the
+  // ledger — without a funded reserve, paying interest would mean
+  // honouring claims you can't redeem. Default to disabled. A canister
+  // operator can enable it later (after pre-funding a reserve canister
+  // subaccount) via setAccrueInterest().
+  stable var accrueInterest : Bool = false;
+
   // Mainnet ICP ledger when no init arg is supplied.
   let mainnetLedgerPrincipal : Principal = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
 
@@ -179,6 +188,12 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     let now = Time.now();
     let rawElapsed : Int = (now - a.lastCompoundedAt) / 1_000_000_000;
     let elapsedS : Int = if (rawElapsed > MAX_COMPOUND_ELAPSED_S) MAX_COMPOUND_ELAPSED_S else rawElapsed;
+    if (not accrueInterest) {
+      // Custody mode: just advance the anchor so when interest is later
+      // enabled the meter starts from now, not from the deposit time.
+      if (rawElapsed > 0) a.lastCompoundedAt := now;
+      return;
+    };
     if (elapsedS > 0 and a.balance > 0) {
       let asFloat = Float.fromInt(a.balance);
       let multiplied = asFloat * (perSecondRate ** Float.fromInt(elapsedS));
@@ -326,11 +341,13 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     maxTxAmount : Nat;
     maxTxLog : Nat;
     minOpIntervalNs : Int;
+    accrueInterest : Bool;
   } {
     {
       maxTxAmount = MAX_TX_AMOUNT;
       maxTxLog = MAX_TX_LOG;
       minOpIntervalNs = MIN_OP_INTERVAL_NS;
+      accrueInterest;
     };
   };
 

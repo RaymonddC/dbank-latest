@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Upload, Download, ArrowRight, Lock } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLimits } from '@/hooks/useLimits';
 import { useLiveBalance } from '@/hooks/useLiveBalance';
 import { icpToE8s, e8sToIcp, formatIcp } from '@/lib/icp';
 import { decodeIcrc1Account } from '@/lib/icrc1';
@@ -20,6 +21,7 @@ const FALLBACK_FEES = { networkFee: 50_000n, withdrawalFee: 100_000n };
 
 const TransactionCard = () => {
   const { actor: dbank, isAuthenticated, isReady, principal } = useAuth();
+  const { accrueInterest } = useLimits();
   const queryClient = useQueryClient();
 
   const [balance, setBalance] = useState<bigint>(0n);
@@ -193,7 +195,9 @@ const TransactionCard = () => {
           </div>
           <CardTitle className="font-serif text-2xl">Sign in to manage your wallet</CardTitle>
           <CardDescription className="max-w-sm">
-            Connect with Internet Identity to deposit, withdraw, and earn 1% daily compounding interest on your balance.
+            {accrueInterest
+              ? 'Connect with Internet Identity to deposit, withdraw, and earn 1% daily compounding interest on your balance.'
+              : 'Connect with Internet Identity to deposit ICP to your custody address and withdraw to any ICRC-1 account.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center pb-8">

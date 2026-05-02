@@ -1,7 +1,10 @@
 import { ArrowRight, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useLimits } from '@/hooks/useLimits';
 
 const Hero = () => {
+  const { accrueInterest } = useLimits();
+
   const scrollToTransactions = () => {
     const element = document.getElementById('transactions');
     if (element) {
@@ -15,17 +18,31 @@ const Hero = () => {
         <div className="max-w-3xl mx-auto text-center space-y-8">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/60 px-3 py-1 text-xs text-muted-foreground">
             <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
-            On-chain · Internet Identity · 1% daily compounding
+            {accrueInterest
+              ? 'On-chain · Internet Identity · 1% daily compounding'
+              : 'On-chain · Internet Identity · ICRC-1 ledger custody'}
           </div>
 
           <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-tight text-foreground">
-            A simple, on-chain wallet
-            <br />
-            <span className="text-accent">that compounds every second.</span>
+            {accrueInterest ? (
+              <>
+                A simple, on-chain wallet
+                <br />
+                <span className="text-accent">that compounds every second.</span>
+              </>
+            ) : (
+              <>
+                A simple, on-chain wallet
+                <br />
+                <span className="text-accent">backed by real ICP, not promises.</span>
+              </>
+            )}
           </h1>
 
           <p className="mx-auto max-w-xl text-lg text-muted-foreground">
-            Sign in with Internet Identity, top up in ICP, and watch your balance grow continuously. No accounts, no passwords, no custodian.
+            {accrueInterest
+              ? 'Sign in with Internet Identity, top up in ICP, and watch your balance grow continuously. No accounts, no passwords, no custodian.'
+              : 'Sign in with Internet Identity, deposit ICP to your custody address, and withdraw to any ICRC-1 account. Every move settles on-chain.'}
           </p>
 
           <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">

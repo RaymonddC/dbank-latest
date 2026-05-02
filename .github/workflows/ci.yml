@@ -55,7 +55,7 @@ jobs:
             checkBalance: () => Promise<bigint>;
             compound: () => Promise<void>;
             getFees: () => Promise<{ networkFee: bigint; withdrawalFee: bigint }>;
-            getLimits: () => Promise<{ maxTxAmount: bigint; maxTxLog: bigint; minOpIntervalNs: bigint }>;
+            getLimits: () => Promise<{ maxTxAmount: bigint; maxTxLog: bigint; minOpIntervalNs: bigint; accrueInterest: boolean }>;
             getTransactions: () => Promise<unknown[]>;
             getDepositAccount: () => Promise<LedgerAccount>;
             getLedgerCanister: () => Promise<Principal>;
