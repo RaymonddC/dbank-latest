@@ -1,5 +1,30 @@
 # PR11 — Real ICP Ledger Integration
 
+> **Status: shipped.** PR11.1–PR11.4 landed as four stacked commits on the
+> dbank PR ladder:
+>
+> | Sub-PR  | Commit    | What it shipped |
+> |---------|-----------|-----------------|
+> | PR11.1  | `507ea92` | Actor class with init args, ICRC-1 types, `subaccountFor`, `getDepositAccount`, `getLedgerCanister`, frontend ICRC-1 textual encoder + `<DepositAddress />` |
+> | PR11.2  | `cf390d6` | `lastSeenLedgerBalance`, `notifyDeposit() : Result<Nat, NotifyError>`, `#deposit` transaction kind, frontend "Notify deposit" button |
+> | PR11.3  | `4c4b95c` | `withdraw(amount, dest)` via real `icrc1_transfer`, `#ledgerError` + `#ledgerUnreachable` variants, race-safe pre-decrement of `lastSeenLedgerBalance` before the await, ICRC-1 destination input on the withdraw form |
+> | PR11.4  | `1657d4e` | `accrueInterest` flag (default `false`), `compoundAccount` no-op in custody mode, `useLimits()` hook, conditional landing copy |
+>
+> The §11 verification gates are now automated by `scripts/verify-pr11.sh`
+> (PR13, commit `0cf975e`). The §10 sub-PR split exists as actual branches:
+> `pr11.1-ledger-plumbing`, `pr11.2-notify-deposit`, `pr11.3-real-withdraw`,
+> `pr11.4-disable-simulation-interest`.
+>
+> **Still open** (§14): reserve funding strategy for re-enabling interest
+> in production, per-user deposit caps, withdrawal-address whitelist,
+> off-chain monitoring. None of these are blockers for using custody
+> mode as-is.
+>
+> The technical content below — architecture, race conditions, mainnet
+> + rollback checklists — is unchanged and remains the reference.
+
+---
+
 This is the plan + verification checklist for replacing the simulated balances in
 `src/dbank-latest-backend` with custody of real ICP held in the ICP ledger
 canister. It assumes PR1–PR10 + PR12 are merged.
