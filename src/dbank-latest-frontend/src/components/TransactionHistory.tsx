@@ -9,11 +9,29 @@ import { e8sToIcp, formatIcp } from '@/lib/icp';
 import { downloadCsv, toCsv } from '@/lib/csv';
 
 interface TransactionView {
-  kind: { topUp: null } | { withdraw: null };
+  kind: { topUp: null } | { withdraw: null } | { deposit: null };
   amount: bigint;
   fee: bigint;
   balanceAfter: bigint;
   timestamp: bigint;
+}
+
+function txLabel(kind: TransactionView['kind']): string {
+  if ('topUp' in kind) return 'Top up';
+  if ('withdraw' in kind) return 'Withdrawal';
+  if ('deposit' in kind) return 'Deposit';
+  return 'Transaction';
+}
+
+function txKindString(kind: TransactionView['kind']): string {
+  if ('topUp' in kind) return 'topUp';
+  if ('withdraw' in kind) return 'withdraw';
+  if ('deposit' in kind) return 'deposit';
+  return 'unknown';
+}
+
+function isCredit(kind: TransactionView['kind']): boolean {
+  return 'topUp' in kind || 'deposit' in kind;
 }
 
 const INITIAL_LIMIT = 10;
@@ -39,7 +57,7 @@ const TransactionHistory = () => {
     const header = ['Timestamp (ISO)', 'Kind', 'Amount (ICP)', 'Fee (ICP)', 'Balance After (ICP)'];
     const rows = allTxs.map((tx) => [
       new Date(Number(tx.timestamp / 1_000_000n)).toISOString(),
-      'topUp' in tx.kind ? 'topUp' : 'withdraw',
+      txKindString(tx.kind),
       e8sToIcp(tx.amount).toString(),
       e8sToIcp(tx.fee).toString(),
       e8sToIcp(tx.balanceAfter).toString(),
@@ -94,25 +112,25 @@ const TransactionHistory = () => {
           <>
             <ul className="divide-y divide-border">
               {visible.map((tx, i) => {
-                const isTopUp = 'topUp' in tx.kind;
+                const credit = isCredit(tx.kind);
                 return (
                   <li key={i} className="flex items-center justify-between py-3 text-sm">
                     <div className="flex items-center gap-3">
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-foreground">
-                        {isTopUp ? (
+                        {credit ? (
                           <ArrowDownToLine className="h-4 w-4" aria-hidden />
                         ) : (
                           <ArrowUpFromLine className="h-4 w-4" aria-hidden />
                         )}
                       </div>
                       <div className="flex flex-col">
-                        <span className="font-medium text-foreground">{isTopUp ? 'Top up' : 'Withdrawal'}</span>
+                        <span className="font-medium text-foreground">{txLabel(tx.kind)}</span>
                         <span className="text-xs text-muted-foreground">{formatTimestamp(tx.timestamp)}</span>
                       </div>
                     </div>
                     <div className="flex flex-col items-end">
                       <span className="font-mono text-foreground tabular-nums">
-                        {isTopUp ? '+' : '−'}
+                        {credit ? '+' : '−'}
                         {formatIcp(tx.amount)} ICP
                       </span>
                       <span className="text-xs font-mono text-muted-foreground tabular-nums">

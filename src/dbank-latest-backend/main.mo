@@ -40,8 +40,15 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     subaccount : ?Subaccount;
   };
 
+  // Minimal ICRC-1 ledger interface — just the calls dbank needs.
+  type Ledger = actor {
+    icrc1_balance_of : (LedgerAccount) -> async Nat;
+  };
+
+  let ledger : Ledger = actor (Principal.toText(ledgerPrincipal));
+
   // ─── App types (unchanged from PR9) ─────────────────────────────────────
-  public type TransactionKind = { #topUp; #withdraw };
+  public type TransactionKind = { #topUp; #withdraw; #deposit };
 
   public type Transaction = {
     kind : TransactionKind;
@@ -62,7 +69,8 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
   public type Result<T, E> = { #ok : T; #err : E };
 
   type Account = {
-    var balance : Nat;
+    var balance : Nat;                  // internal balance (e8s)
+    var lastSeenLedgerBalance : Nat;    // ledger balance at last reconciliation
     var lastCompoundedAt : Int;
     var lastOpAt : Int;
     transactions : Buffer.Buffer<Transaction>;
@@ -70,6 +78,7 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
 
   type StableAccount = {
     balance : Nat;
+    lastSeenLedgerBalance : Nat;
     lastCompoundedAt : Int;
     lastOpAt : Int;
     transactions : [Transaction];
@@ -84,6 +93,7 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     for (tx in sa.transactions.vals()) txBuf.add(tx);
     accounts.put(p, {
       var balance = sa.balance;
+      var lastSeenLedgerBalance = sa.lastSeenLedgerBalance;
       var lastCompoundedAt = sa.lastCompoundedAt;
       var lastOpAt = sa.lastOpAt;
       transactions = txBuf;
@@ -95,6 +105,7 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     for ((p, a) in accounts.entries()) {
       buf.add((p, {
         balance = a.balance;
+        lastSeenLedgerBalance = a.lastSeenLedgerBalance;
         lastCompoundedAt = a.lastCompoundedAt;
         lastOpAt = a.lastOpAt;
         transactions = Buffer.toArray(a.transactions);
@@ -117,6 +128,7 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
       case null {
         let a : Account = {
           var balance = 0;
+          var lastSeenLedgerBalance = 0;
           var lastCompoundedAt = Time.now();
           var lastOpAt = 0;
           transactions = Buffer.Buffer<Transaction>(8);
@@ -258,5 +270,51 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
   // can verify which ledger this canister speaks to.
   public query func getLedgerCanister() : async Principal {
     ledgerPrincipal;
+  };
+
+  // ─── Deposit reconciliation (PR11.2) ────────────────────────────────────
+  //
+  // Reconciles the caller's on-ledger deposit subaccount against their
+  // internal balance. Called after the user transfers ICP to their deposit
+  // address. Idempotent: if no new ICP arrived since the last call, returns
+  // #ok(0).
+  //
+  // Race-condition story: two simultaneous notifies snapshot the ledger
+  // balance independently, but only one's `await` completes first. That
+  // continuation advances `lastSeenLedgerBalance` to the snapshot value.
+  // The second continuation then sees `onLedger <= lastSeenLedgerBalance`
+  // and returns #ok(0). Idempotent without explicit locking.
+  public type NotifyError = {
+    #rateLimited : { retryAfterNs : Int };
+    #ledgerUnreachable : { message : Text };
+  };
+
+  public shared (msg) func notifyDeposit() : async Result<Nat, NotifyError> {
+    requireAuthed(msg.caller);
+    let a = getOrCreate(msg.caller);
+    let wait = rateLimitWait(a);
+    if (wait > 0) return #err(#rateLimited({ retryAfterNs = wait }));
+
+    let onLedger : Nat = try {
+      await ledger.icrc1_balance_of({
+        owner = Principal.fromActor(self);
+        subaccount = ?subaccountFor(msg.caller);
+      });
+    } catch (err) {
+      return #err(#ledgerUnreachable({ message = debug_show err }));
+    };
+
+    if (onLedger <= a.lastSeenLedgerBalance) {
+      // No new deposits. Update lastOpAt anyway to consume rate-limit budget.
+      a.lastOpAt := Time.now();
+      return #ok(0);
+    };
+
+    let credit : Nat = onLedger - a.lastSeenLedgerBalance;
+    compoundAccount(a);
+    a.balance += credit;
+    a.lastSeenLedgerBalance := onLedger;
+    recordTx(a, #deposit, credit, 0);
+    #ok(credit);
   };
 };
