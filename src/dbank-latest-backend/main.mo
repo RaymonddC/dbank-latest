@@ -33,6 +33,12 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
   // subaccount) via setAccrueInterest().
   stable var accrueInterest : Bool = false;
 
+  // PR16: first-touch controller. The first non-anonymous caller of
+  // claimController() becomes the only principal allowed to flip
+  // accrueInterest. For a proper deployment swap this for an init-arg
+  // controller or an inter-canister call to the management canister.
+  stable var controller : ?Principal = null;
+
   // Mainnet ICP ledger when no init arg is supplied.
   let mainnetLedgerPrincipal : Principal = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
 
@@ -115,9 +121,13 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     transactions : Buffer.Buffer<Transaction>;
   };
 
+  // PR16: lastSeenLedgerBalance is `?Nat` so an existing PR9 deployment
+  // (which had no such field) can upgrade to this version without a
+  // stable-signature mismatch trap. Reads default to 0; writes always
+  // wrap as `?n`.
   type StableAccount = {
     balance : Nat;
-    lastSeenLedgerBalance : Nat;
+    lastSeenLedgerBalance : ?Nat;
     lastCompoundedAt : Int;
     lastOpAt : Int;
     transactions : [Transaction];
@@ -130,9 +140,13 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
   for ((p, sa) in accountEntries.vals()) {
     let txBuf = Buffer.Buffer<Transaction>(sa.transactions.size());
     for (tx in sa.transactions.vals()) txBuf.add(tx);
+    let lastSeen : Nat = switch (sa.lastSeenLedgerBalance) {
+      case (?n) n;
+      case null 0;
+    };
     accounts.put(p, {
       var balance = sa.balance;
-      var lastSeenLedgerBalance = sa.lastSeenLedgerBalance;
+      var lastSeenLedgerBalance = lastSeen;
       var lastCompoundedAt = sa.lastCompoundedAt;
       var lastOpAt = sa.lastOpAt;
       transactions = txBuf;
@@ -144,7 +158,7 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     for ((p, a) in accounts.entries()) {
       buf.add((p, {
         balance = a.balance;
-        lastSeenLedgerBalance = a.lastSeenLedgerBalance;
+        lastSeenLedgerBalance = ?a.lastSeenLedgerBalance;
         lastCompoundedAt = a.lastCompoundedAt;
         lastOpAt = a.lastOpAt;
         transactions = Buffer.toArray(a.transactions);
@@ -259,6 +273,11 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     let a = getOrCreate(msg.caller);
     let wait = rateLimitWait(a);
     if (wait > 0) return #err(#rateLimited({ retryAfterNs = wait }));
+    // PR16: claim the rate-limit budget BEFORE any await. Without this,
+    // two concurrent withdraws would both pass the rate-limit check
+    // (since lastOpAt was unchanged) and interleave between the
+    // icrc1_fee and icrc1_transfer awaits.
+    a.lastOpAt := Time.now();
 
     compoundAccount(a);
 
@@ -279,7 +298,6 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     a.lastSeenLedgerBalance := if (a.lastSeenLedgerBalance >= totalNeeded) {
       a.lastSeenLedgerBalance - totalNeeded;
     } else { 0 };
-    a.lastOpAt := Time.now();
 
     let result : LedgerTransferResult = try {
       await ledger.icrc1_transfer({
@@ -351,6 +369,42 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     };
   };
 
+  // ─── Controller / accrueInterest toggle (PR16) ──────────────────────────
+  // First-touch controller: the first non-anonymous principal to call
+  // claimController() is recorded as `controller` and is the only principal
+  // permitted to call setAccrueInterest. Subsequent claim attempts fail.
+  // For production swap this for an init-arg controller or a dynamic check
+  // against the management canister's `canister_status.controllers`.
+
+  public type ControllerError = { #alreadyClaimed; #notController };
+
+  public shared (msg) func claimController() : async Result<Principal, ControllerError> {
+    requireAuthed(msg.caller);
+    switch (controller) {
+      case (?_) #err(#alreadyClaimed);
+      case null {
+        controller := ?msg.caller;
+        #ok(msg.caller);
+      };
+    };
+  };
+
+  public query func getController() : async ?Principal {
+    controller;
+  };
+
+  public shared (msg) func setAccrueInterest(enabled : Bool) : async Result<(), ControllerError> {
+    requireAuthed(msg.caller);
+    switch (controller) {
+      case (?c) {
+        if (msg.caller != c) return #err(#notController);
+        accrueInterest := enabled;
+        #ok(());
+      };
+      case null #err(#notController);
+    };
+  };
+
   // ─── Ledger introspection (new in PR11.1) ───────────────────────────────
   // Returns the ICRC-1 account where this user should send ICP to top up.
   // Owner is the dbank canister's principal; subaccount is derived from the
@@ -391,6 +445,8 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     let a = getOrCreate(msg.caller);
     let wait = rateLimitWait(a);
     if (wait > 0) return #err(#rateLimited({ retryAfterNs = wait }));
+    // PR16: claim rate-limit budget before the inter-canister call.
+    a.lastOpAt := Time.now();
 
     let onLedger : Nat = try {
       await ledger.icrc1_balance_of({
@@ -402,8 +458,7 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     };
 
     if (onLedger <= a.lastSeenLedgerBalance) {
-      // No new deposits. Update lastOpAt anyway to consume rate-limit budget.
-      a.lastOpAt := Time.now();
+      // No new deposits. lastOpAt is already updated above.
       return #ok(0);
     };
 

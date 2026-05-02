@@ -53,13 +53,16 @@ jobs:
           }
           export interface _SERVICE {
             checkBalance: () => Promise<bigint>;
+            claimController: () => Promise<{ ok: Principal } | { err: unknown }>;
             compound: () => Promise<void>;
+            getController: () => Promise<[] | [Principal]>;
+            getDepositAccount: () => Promise<LedgerAccount>;
             getFees: () => Promise<{ networkFee: bigint; withdrawalFee: bigint }>;
+            getLedgerCanister: () => Promise<Principal>;
             getLimits: () => Promise<{ maxTxAmount: bigint; maxTxLog: bigint; minOpIntervalNs: bigint; accrueInterest: boolean }>;
             getTransactions: () => Promise<unknown[]>;
-            getDepositAccount: () => Promise<LedgerAccount>;
-            getLedgerCanister: () => Promise<Principal>;
             notifyDeposit: () => Promise<{ ok: bigint } | { err: unknown }>;
+            setAccrueInterest: (enabled: boolean) => Promise<{ ok: null } | { err: unknown }>;
             topUp: (amount: bigint) => Promise<{ ok: null } | { err: unknown }>;
             withdraw: (amount: bigint, dest: LedgerAccount) => Promise<{ ok: bigint } | { err: unknown }>;
           }
