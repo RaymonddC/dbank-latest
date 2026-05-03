@@ -108,11 +108,16 @@ Internet Identity and the ICP ledger via `dfx deps`, mints test ICP to a
 local identity, and deploys `dbank-latest-backend` with the local ledger
 canister id passed as an init argument.
 
-To verify the ledger integration end-to-end (PR11.1 → PR11.4):
+To verify the canister + ledger integration end-to-end:
 
 ```bash
-./scripts/verify-pr11.sh                   # exits non-zero on the first failed gate
+./scripts/e2e-test.sh                      # 30-ish assertions, exits non-zero on the first fail
 ```
+
+The e2e script walks every public canister method, every error variant,
+deposit reconciliation idempotency, rate limiting, withdraw refund on
+ledger reject, and upgrade-preserves-state. It assumes the local
+replica + ledger are already up via `local-ledger-setup.sh`.
 
 See [docs/local-dev.md](docs/local-dev.md) for the full walkthrough,
 including how to override the test user / initial mint amount.
@@ -121,7 +126,7 @@ including how to override the test user / initial mint amount.
 
 ```bash
 cd src/dbank-latest-frontend
-npm test                                   # vitest run (40+ cases)
+npm test                                   # vitest run (50 cases)
 npm run typecheck                          # tsc --noEmit
 ```
 

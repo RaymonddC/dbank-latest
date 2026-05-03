@@ -263,20 +263,10 @@ persistent actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     });
   };
 
-  // ─── App methods (PR9 set, unchanged) ───────────────────────────────────
-  public shared (msg) func topUp(amount : Nat) : async Result<(), TransferError> {
-    requireAuthed(msg.caller);
-    if (amount == 0) return #err(#invalidAmount);
-    if (amount > MAX_TX_AMOUNT) return #err(#amountTooLarge({ max = MAX_TX_AMOUNT }));
-    if (amount <= networkFee) return #err(#belowFee({ fee = networkFee }));
-    let a = getOrCreate(msg.caller);
-    let wait = rateLimitWait(a);
-    if (wait > 0) return #err(#rateLimited({ retryAfterNs = wait }));
-    compoundAccount(a);
-    a.balance += amount - networkFee;
-    recordTx(a, #topUp, amount, networkFee);
-    #ok(());
-  };
+  // ─── App methods ────────────────────────────────────────────────────────
+  // Note: there is no `topUp` method. Internal balance is only ever credited
+  // by `notifyDeposit()` reconciling against the on-ledger subaccount, so
+  // every internal e8s is backed 1:1 by real ICP held in the ledger.
 
   // PR11.3: real withdraw via icrc1_transfer.
   //

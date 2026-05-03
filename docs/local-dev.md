@@ -24,25 +24,35 @@ What it does:
    (`(opt record { ledger = principal "<local-ledger-id>" })`).
 6. Sanity-checks `getLedgerCanister` round-trips the local ledger id.
 
-## Verify PR11 end-to-end
+## Verify everything end-to-end
 
 ```bash
-./scripts/verify-pr11.sh           # default user: alice
-./scripts/verify-pr11.sh bob       # custom user
+./scripts/e2e-test.sh              # default user: alice, recipient: bob
+./scripts/e2e-test.sh carol dave   # custom identities
 ```
 
-Walks the verification gates from `docs/pr11-ledger-integration.md`:
+Walks ~30 assertions in 15 sections:
 
-- **PR11.1**: `getLedgerCanister` matches local ledger; `getDepositAccount`
-  returns the expected owner + subaccount shape.
-- **PR11.2**: `notifyDeposit` returns `ok = 0` baseline → `icrc1_transfer`
-  5 ICP into the deposit subaccount → `notifyDeposit` returns
-  `ok = 500_000_000` → second `notifyDeposit` returns `ok = 0`
-  (idempotent) → `checkBalance` reports 5 ICP.
-- **PR11.3**: `withdraw(1 ICP, user-account)` returns a ledger block index.
-- **PR11.4**: `getLimits` reports `accrueInterest = false` (custody mode).
+1. Read-only methods (`getFees`, `getLimits`, `getLedgerCanister`, `getController`) return sensible shapes.
+2. Anonymous calls trap on every auth-required method.
+3. Controller flow: claim once, re-claim fails, `setAccrueInterest` is gated.
+4. `getDepositAccount` returns dbank-as-owner + per-user subaccount.
+5. `notifyDeposit` baseline.
+6. Real `icrc1_transfer` 5 ICP → user's deposit subaccount.
+7. `notifyDeposit` credits 5 ICP, idempotent on re-call.
+8. `checkBalance` reflects the credit.
+9. `withdraw` 1 ICP → recipient's ledger balance grows by exactly 1 ICP.
+10. Internal balance reflects (5 − 1 − 0.0001 fee).
+11. Withdraw error variants: `#invalidAmount`, `#amountTooLarge`, `#insufficientFunds`.
+12. Rate limiting: rapid second op → `#rateLimited` (or `ok=0`).
+13. Withdraw refund on ledger reject.
+14. `getTransactions` returns the expected `#deposit` + `#withdraw` entries.
+15. Upgrade preserves balance + tx log + controller.
 
-Exits non-zero on the first failed check.
+Exits non-zero on the first failed assertion. Pass/fail counts at the end.
+
+`scripts/verify-pr11.sh` is the older, narrower script targeted just at
+PR11.1–PR11.4 acceptance gates; `e2e-test.sh` supersedes it.
 
 ## Reset
 
