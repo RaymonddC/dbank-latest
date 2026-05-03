@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (lint · typecheck · test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Stub generated declarations
+        # The frontend imports from `src/declarations/dbank-latest-backend` which
+        # is produced by `dfx generate`. CI runs without dfx, so we drop in a
+        # minimal placeholder that exposes the symbols typecheck and bundle care
+        # about. The Motoko job below validates the real canister + IDL.
+        run: |
+          mkdir -p src/declarations/dbank-latest-backend
+          cat > src/declarations/dbank-latest-backend/index.d.ts <<'EOF'
+          import type { ActorSubclass } from '@icp-sdk/core/agent';
+          import type { _SERVICE } from './dbank-latest-backend.did';
+          export declare const idlFactory: import('@icp-sdk/core/candid').IDL.InterfaceFactory;
+          export declare const canisterId: string;
+          export declare const dbank_latest_backend: ActorSubclass<_SERVICE>;
+          EOF
+          cat > src/declarations/dbank-latest-backend/index.js <<'EOF'
+          export const idlFactory = () => null;
+          export const canisterId = 'aaaaa-aa';
+          export const dbank_latest_backend = {};
+          EOF
+          cat > src/declarations/dbank-latest-backend/dbank-latest-backend.did.d.ts <<'EOF'
+          import type { Principal } from '@icp-sdk/core/principal';
+          export interface LedgerAccount {
+            owner: Principal;
+            subaccount: [Uint8Array] | [];
+          }
+          export interface _SERVICE {
+            checkBalance: () => Promise<bigint>;
+            claimController: () => Promise<{ ok: Principal } | { err: unknown }>;
+            compound: () => Promise<void>;
+            getController: () => Promise<[] | [Principal]>;
+            getDepositAccount: () => Promise<LedgerAccount>;
+            getFees: () => Promise<{ networkFee: bigint; withdrawalFee: bigint }>;
+            getLedgerCanister: () => Promise<Principal>;
+            getLimits: () => Promise<{ maxTxAmount: bigint; maxTxLog: bigint; minOpIntervalNs: bigint; accrueInterest: boolean }>;
+            getTransactions: () => Promise<unknown[]>;
+            notifyDeposit: () => Promise<{ ok: bigint } | { err: unknown }>;
+            setAccrueInterest: (enabled: boolean) => Promise<{ ok: null } | { err: unknown }>;
+            withdraw: (amount: bigint, dest: LedgerAccount) => Promise<{ ok: bigint } | { err: unknown }>;
+          }
+          export type Principal = import('@icp-sdk/core/principal').Principal;
+          EOF
+
+      - name: Typecheck
+        working-directory: src/dbank-latest-frontend
+        run: npm run typecheck
+
+      - name: Test
+        working-directory: src/dbank-latest-frontend
+        run: npm test
+
+  motoko:
+    name: Motoko (build canister)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dfx
+        run: |
+          DFXVM_INIT_YES=true sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
+          echo "$HOME/.local/share/dfx/bin" >> "$GITHUB_PATH"
+
+      - name: Verify dfx is on PATH
+        run: dfx --version
+
+      - name: Start local replica
+        run: dfx start --background --clean
+
+      - name: Create canister id
+        # `dfx build` requires the canister to have a registered id; create
+        # writes one to .dfx/local/canister_ids.json. We don't pull the
+        # II / ICP ledger deps because main.mo only references them at
+        # runtime via dynamic `actor (principal-text)` refs, not via any
+        # build-time `import "canister:..."`.
+        run: dfx canister create dbank-latest-backend
+
+      - name: Build dbank-latest-backend
+        run: dfx build dbank-latest-backend
+
+      - name: Stop replica
+        if: always()
+        run: dfx stop || true

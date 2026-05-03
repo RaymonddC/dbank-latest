@@ -1,189 +1,232 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Download, ArrowRight } from 'lucide-react';
-import { dbank_latest_backend as dbank } from '../../../declarations/dbank-latest-backend';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ArrowRight, Lock } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useLiveBalance } from '@/hooks/useLiveBalance';
+import { icpToE8s, formatIcp } from '@/lib/icp';
+import { decodeIcrc1Account } from '@/lib/icrc1';
+import { describeTransferError, errorMessage } from '@/lib/transferErrors';
+import WalletButton from './WalletButton';
+import TransactionHistory from './TransactionHistory';
+import DepositAddress from './DepositAddress';
 
 const TransactionCard = () => {
-  const networkFee = Number(import.meta.env.VITE_NETWORK_FEE) || 0.0005;
-  const withdrawalFee = Number(import.meta.env.VITE_WITHDRAWAL_FEE) || 0.001;
+  const { actor: dbank, isAuthenticated, isReady, principal } = useAuth();
+  const queryClient = useQueryClient();
 
-  const [balance, setBalance] = useState<number>(0);
-  const [amount, setAmount] = useState<string>('');
+  const [withdrawAmount, setWithdrawAmount] = useState<string>('');
+  const [destination, setDestination] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<string>('topup');
+  // Optimistic overrides for the live-ticking display. When set, they take
+  // precedence over the server balance until the next successful refetch.
+  const [optimisticBalance, setOptimisticBalance] = useState<bigint | null>(null);
+  const [optimisticAnchor, setOptimisticAnchor] = useState<number>(Date.now());
 
+  // M2: balance is a TanStack query so DepositAddress and handleWithdraw can
+  // both invalidate it via queryClient.invalidateQueries(['balance']).
+  const balanceQuery = useQuery({
+    queryKey: ['balance', principal?.toText() ?? 'anonymous'],
+    queryFn: async () => {
+      if (!dbank) throw new Error('No actor');
+      await dbank.compound();
+      return await dbank.checkBalance();
+    },
+    enabled: !!dbank && isAuthenticated,
+    refetchOnWindowFocus: false,
+  });
+
+  // When new server data lands, drop any optimistic override.
   useEffect(() => {
-    const fetchBalance = async (): Promise<void> => {
-      try {
-        await dbank.compound();
-        const currentBalance: number = await dbank.checkBalance();
-        setBalance(Math.round(currentBalance * 100) / 100);
-      } catch (error) {
-        console.error('Error fetching balance:', error);
-      }
-    };
+    if (balanceQuery.data !== undefined) {
+      setOptimisticBalance(null);
+      setOptimisticAnchor(Date.now());
+    }
+  }, [balanceQuery.data, balanceQuery.dataUpdatedAt]);
 
-    fetchBalance();
-  }, []);
+  const baseBalance: bigint = optimisticBalance ?? balanceQuery.data ?? 0n;
+  const baseAnchor: number = optimisticBalance !== null ? optimisticAnchor : balanceQuery.dataUpdatedAt || Date.now();
+  const liveBalance = useLiveBalance(baseBalance, baseAnchor);
+  const balanceLoaded = balanceQuery.isSuccess || optimisticBalance !== null;
 
-  const handleSubmit = async (e: React.FormEvent, type: string) => {
+  const refetchBalance = useMemo(
+    () => () => queryClient.invalidateQueries({ queryKey: ['balance'] }),
+    [queryClient],
+  );
+
+  const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
-    const parsedAmount: number = parseFloat(amount);
+    if (!dbank) return;
 
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      console.error('Invalid amount. Please enter a positive number.');
+    const parsed = parseFloat(withdrawAmount);
+    if (isNaN(parsed) || parsed <= 0) {
+      toast.error('Enter a positive amount');
       return;
     }
 
-    // Validate amount with fees
-    if (type === 'withdrawal' && parsedAmount + withdrawalFee > balance) {
-      console.error('Insufficient funds including fee');
+    let amountE8s: bigint;
+    try {
+      amountE8s = icpToE8s(parsed);
+    } catch (err) {
+      toast.error(errorMessage(err));
       return;
     }
+
+    let dest;
+    try {
+      const parsedAcc = decodeIcrc1Account(destination.trim());
+      dest = {
+        owner: parsedAcc.owner,
+        subaccount: parsedAcc.subaccount ? ([parsedAcc.subaccount] as [Uint8Array]) : ([] as []),
+      };
+    } catch (err) {
+      toast.error('Invalid destination address', { description: errorMessage(err) });
+      return;
+    }
+
+    const previousOptimistic = optimisticBalance;
+    // Optimistic deduction (uses an estimate of the ledger fee — actual fee
+    // returned from the backend may differ marginally).
+    const optimisticDeduction = amountE8s + 10_000n;
+    setOptimisticBalance(baseBalance >= optimisticDeduction ? baseBalance - optimisticDeduction : 0n);
+    setOptimisticAnchor(Date.now());
 
     setLoading(true);
     try {
-      if (type === 'top-up') {
-        if (parsedAmount <= networkFee) {
-          console.error('Amount must be greater than network fee');
-          return;
-        }
-        await dbank.topUp(parsedAmount);
-      } else {
-        await dbank.withdraw(parsedAmount);
+      const result = await dbank.withdraw(amountE8s, dest);
+      if ('err' in result) {
+        setOptimisticBalance(previousOptimistic);
+        toast.error('Withdrawal failed', { description: describeTransferError(result.err) });
+        return;
       }
-
-      await dbank.compound();
-      const updatedBalance: number = await dbank.checkBalance();
-      setBalance(Math.round(updatedBalance * 100) / 100);
-      setAmount('');
+      toast.success(`Withdrew ${parsed} ICP`, {
+        description: `Ledger block index ${result.ok.toString()}`,
+      });
+      setWithdrawAmount('');
+      setDestination('');
+      refetchBalance();
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
     } catch (error) {
-      console.error(`Error processing ${type}:`, error);
+      setOptimisticBalance(previousOptimistic);
+      toast.error('Withdrawal failed', { description: errorMessage(error) });
     } finally {
       setLoading(false);
     }
   };
 
+  const balanceLabel = balanceLoaded ? (
+    <span className="font-mono text-foreground">{formatIcp(liveBalance, 4)} ICP</span>
+  ) : (
+    <Skeleton className="inline-block h-4 w-24 align-middle" />
+  );
+
+  if (isReady && !isAuthenticated) {
+    return (
+      <Card className="max-w-md w-full mx-auto">
+        <CardHeader className="items-center text-center space-y-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-secondary text-foreground">
+            <Lock className="h-5 w-5" aria-hidden />
+          </div>
+          <CardTitle className="font-serif text-2xl">Sign in to manage your wallet</CardTitle>
+          <CardDescription className="max-w-sm">
+            Connect with Internet Identity to deposit ICP to your custody address and withdraw to any ICRC-1 account.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center pb-8">
+          <WalletButton />
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
-    <Card className="max-w-md w-full mx-auto shadow-xl border-slate-200 dark:border-slate-700/50 glass-card overflow-hidden">
-      <Tabs defaultValue="topup" className="w-full" onValueChange={setActiveTab}>
-        <TabsList className="relative grid w-full grid-cols-2 p-0 rounded-none overflow-hidden bg-icp-blue">
-          <div
-            className="absolute inset-0 bg-icp-teal transition-transform duration-500 linear"
-            style={{
-              width: '50%',
-              transform: activeTab === 'withdraw' ? 'translateX(100%)' : 'translateX(0)',
-            }}
-          />
-          <TabsTrigger value="topup" className="relative py-3 text-white font-medium data-[state=active]:bg-transparent">
-            <Upload className="mr-2 h-4 w-4" />
-            Top Up
-          </TabsTrigger>
-          <TabsTrigger value="withdraw" className="relative py-3 text-white font-medium data-[state=active]:bg-transparent">
-            <Download className="mr-2 h-4 w-4" />
-            Withdraw
-          </TabsTrigger>
-        </TabsList>
+    <div className="max-w-md w-full mx-auto space-y-5">
+      {/* Order: deposit address (the entry point) → withdraw form (the exit) →
+          history. Custody mode is the only mode now that topUp is gone. */}
+      <DepositAddress />
 
-        <TabsContent value="topup" className="opacity-100 transition-opacity duration-300 data-[state=inactive]:opacity-0">
-          <CardHeader>
-            <CardTitle>Top Up Your ICP Wallet</CardTitle>
-            <CardDescription>Add funds to your Internet Computer wallet quickly and securely.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={(e) => handleSubmit(e, 'top-up')}>
-              <div className="grid gap-4">
-                <div className="grid gap-2">
-                  <label htmlFor="amount" className="text-sm font-medium dark:text-slate-200">
-                    Amount (ICP)
-                  </label>
-                  <Input
-                    id="amount"
-                    placeholder="Enter amount"
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="border-slate-300 dark:border-slate-700 dark:bg-slate-800/70 transition-all duration-200"
-                    step="0.001"
-                    min="0"
-                    required
-                    disabled={loading}
-                  />
-                </div>
-                <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
-                  <span>Network Fee: {networkFee} ICP</span>
-                  <span>Balance: {balance.toFixed(2)} ICP</span>
-                </div>
+      <Card className="overflow-hidden">
+        <CardHeader className="space-y-2">
+          <CardTitle className="font-serif text-xl">Withdraw to an account</CardTitle>
+          <CardDescription>Transfer ICP via the ledger to any ICRC-1 account.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleWithdraw} aria-busy={loading}>
+            <div className="grid gap-4">
+              <div className="grid gap-2">
+                <label htmlFor="withdrawal-destination" className="text-sm font-medium text-foreground">
+                  Destination (ICRC-1 account)
+                </label>
+                <Input
+                  id="withdrawal-destination"
+                  placeholder="aaaaa-aa or aaaaa-aa-xxxxxxxx.1"
+                  type="text"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  value={destination}
+                  onChange={(e) => setDestination(e.target.value)}
+                  className="font-mono text-xs"
+                  required
+                  disabled={loading}
+                />
               </div>
-              <Button
-                className="w-full mt-6 relative bg-gradient-to-r from-icp-blue via-icp-teal to-icp-blue bg-[size:200%_100%] bg-right-bottom hover:bg-left-bottom text-white font-medium shadow-md hover:shadow-lg transition-[background-position] duration-500 ease-in-out group"
-                type="submit"
-                disabled={loading}
-              >
-                {loading ? (
-                  'Processing...'
-                ) : (
-                  <>
-                    Continue to Payment <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
-                  </>
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </TabsContent>
-
-        <TabsContent value="withdraw" className="opacity-100 transition-opacity duration-300 data-[state=inactive]:opacity-0">
-          <CardHeader>
-            <CardTitle>Withdraw From Your ICP Wallet</CardTitle>
-            <CardDescription>Transfer funds from your Internet Computer wallet to your bank account.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={(e) => handleSubmit(e, 'withdrawal')}>
-              <div className="grid gap-4">
-                <div className="grid gap-2">
-                  <label htmlFor="withdrawal-amount" className="text-sm font-medium dark:text-slate-200">
-                    Amount (ICP)
-                  </label>
+              <div className="grid gap-2">
+                <label htmlFor="withdrawal-amount" className="text-sm font-medium text-foreground">
+                  Amount
+                </label>
+                <div className="relative">
                   <Input
                     id="withdrawal-amount"
-                    placeholder="Enter amount"
+                    placeholder="0.00"
                     type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="border-slate-300 dark:border-slate-700 dark:bg-slate-800/70 transition-all duration-200"
+                    inputMode="decimal"
+                    value={withdrawAmount}
+                    onChange={(e) => setWithdrawAmount(e.target.value)}
+                    className="pr-12"
                     step="0.001"
                     min="0"
                     required
                     disabled={loading}
+                    aria-describedby="withdraw-fees"
                   />
-                </div>
-                <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400">
-                  <span>Withdrawal Fee: {withdrawalFee} ICP</span>
-                  <span>Available: {balance.toFixed(2)} ICP</span>
+                  <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-medium text-muted-foreground">
+                    ICP
+                  </span>
                 </div>
               </div>
-              <Button
-                className="w-full mt-6 relative bg-gradient-to-r from-icp-blue via-icp-teal to-icp-blue bg-[size:200%_100%] bg-right-bottom hover:bg-left-bottom text-white font-medium shadow-md hover:shadow-lg transition-[background-position] duration-500 ease-in-out group"
-                type="submit"
-                disabled={loading}
-              >
-                {loading ? (
-                  'Processing...'
-                ) : (
-                  <>
-                    Withdraw Funds <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
-                  </>
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </TabsContent>
-      </Tabs>
-      <CardFooter className="flex justify-center p-6 border-t border-slate-200 dark:border-slate-700/50 text-sm text-slate-500 dark:text-slate-400">All transactions are encrypted and secure</CardFooter>
-    </Card>
+              <dl id="withdraw-fees" className="flex justify-between text-xs text-muted-foreground">
+                <div>
+                  <dt className="sr-only">Ledger fee</dt>
+                  <dd>Ledger fee charged at submit</dd>
+                </div>
+                <div>
+                  <dt className="sr-only">Available</dt>
+                  <dd>Available {balanceLabel}</dd>
+                </div>
+              </dl>
+            </div>
+            <Button className="w-full mt-6 group" type="submit" disabled={loading}>
+              {loading ? 'Processing…' : (
+                <>
+                  Withdraw
+                  <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
+                </>
+              )}
+            </Button>
+          </form>
+        </CardContent>
+        <CardFooter className="border-t border-border px-6 py-4 text-xs text-muted-foreground">
+          Signed by Internet Identity. Withdrawals settle on the ICP ledger.
+        </CardFooter>
+      </Card>
+
+      <TransactionHistory />
+    </div>
   );
 };
 

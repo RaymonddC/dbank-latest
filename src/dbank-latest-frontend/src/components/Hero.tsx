@@ -1,7 +1,10 @@
 import { ArrowRight, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useLimits } from '@/hooks/useLimits';
 
 const Hero = () => {
+  const { accrueInterest } = useLimits();
+
   const scrollToTransactions = () => {
     const element = document.getElementById('transactions');
     if (element) {
@@ -10,36 +13,51 @@ const Hero = () => {
   };
 
   return (
-    <section className="relative pt-32 pb-20 md:pt-40 md:pb-28 overflow-hidden">
-      {/* Background Elements */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10">
-        <div className="absolute top-0 right-0 w-1/2 h-1/2 bg-gradient-radial from-icp-teal/10 to-transparent opacity-70"></div>
-        <div className="absolute bottom-0 left-0 w-1/3 h-1/3 bg-gradient-radial from-icp-purple/10 to-transparent opacity-70"></div>
-      </div>
-
+    <section className="relative pt-24 pb-20 md:pt-32 md:pb-28 overflow-hidden">
       <div className="container mx-auto px-4">
-        <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-4xl md:text-6xl font-bold mb-6">
-            Secure <span className="text-gradient drop-shadow-sm">ICP Network</span> Transactions Made Simple
+        <div className="max-w-3xl mx-auto text-center space-y-8">
+          <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/60 px-3 py-1 text-xs text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
+            {accrueInterest
+              ? 'On-chain · Internet Identity · 1% daily compounding'
+              : 'On-chain · Internet Identity · ICRC-1 ledger custody'}
+          </div>
+
+          <h1 className="font-serif text-4xl md:text-6xl font-medium leading-[1.05] tracking-tight text-foreground">
+            {accrueInterest ? (
+              <>
+                A simple, on-chain wallet
+                <br />
+                <span className="text-accent">that compounds every second.</span>
+              </>
+            ) : (
+              <>
+                A simple, on-chain wallet
+                <br />
+                <span className="text-accent">backed by real ICP, not promises.</span>
+              </>
+            )}
           </h1>
-          <p className="text-xl text-slate-600 dark:text-slate-300 mb-10 max-w-2xl mx-auto">The most elegant way to top up and withdraw from the Internet Computer Protocol network. Fast, secure, and designed for you.</p>
-          <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Button
-              className="relative bg-gradient-to-r from-icp-blue via-icp-teal to-icp-blue bg-[size:200%_100%] bg-right-bottom hover:bg-left-bottom text-white font-medium shadow-md hover:shadow-lg transition-[background-position] duration-500 ease-in-out px-8 py-6 text-lg group"
-              onClick={scrollToTransactions}
-            >
-              Get Started <ArrowRight className="ml-2 h-5 w-5 transition-transform duration-300 group-hover:translate-x-1" />
+
+          <p className="mx-auto max-w-xl text-lg text-muted-foreground">
+            {accrueInterest
+              ? 'Sign in with Internet Identity, top up in ICP, and watch your balance grow continuously. No accounts, no passwords, no custodian.'
+              : 'Sign in with Internet Identity, deposit ICP to your custody address, and withdraw to any ICRC-1 account. Every move settles on-chain.'}
+          </p>
+
+          <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
+            <Button size="lg" onClick={scrollToTransactions} className="group h-11 px-6 text-base">
+              Get Started
+              <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
             </Button>
-            <Button
-              variant="outline"
-              className="border-2 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800 px-8 py-6 text-lg font-medium shadow-md hover:shadow-xl transition-all duration-300 ease-in-out"
-            >
-              Learn More
+            <Button asChild size="lg" variant="outline" className="h-11 px-6 text-base">
+              <a href="#features">Learn more</a>
             </Button>
           </div>
-          <div className="mt-20 animate-bounce">
-            <a href="#features" className="inline-flex items-center justify-center">
-              <ChevronDown className="h-8 w-8 text-slate-400 dark:text-slate-300" />
+
+          <div className="pt-12">
+            <a href="#features" className="inline-flex items-center justify-center text-muted-foreground/60 hover:text-foreground transition-colors" aria-label="Scroll to features">
+              <ChevronDown className="h-6 w-6 animate-bounce" aria-hidden />
             </a>
           </div>
         </div>
