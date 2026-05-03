@@ -1,6 +1,7 @@
 import Array "mo:base/Array";
 import Blob "mo:base/Blob";
 import Buffer "mo:base/Buffer";
+import Error "mo:base/Error";
 import Float "mo:base/Float";
 import Int "mo:base/Int";
 import Nat8 "mo:base/Nat8";
@@ -11,18 +12,24 @@ import TrieMap "mo:base/TrieMap";
 // PR11.1: actor class so we can pass the ICP ledger canister id at deploy
 // time. Omit the arg (or pass `(null)`) to use mainnet's ledger;
 // pass `(opt record { ledger = principal "<id>" })` for local dev.
-actor class DBank(initArgs : ?{ ledger : Principal }) = self {
+//
+// PR18.2: `persistent` is moc 1.7+'s required marker for actor classes
+// with stable vars.
+persistent actor class DBank(initArgs : ?{ ledger : Principal }) = self {
 
   // ─── Constants ───────────────────────────────────────────────────────────
-  let E8S_PER_ICP : Nat = 100_000_000;
-  let networkFee : Nat = 50_000;       // 0.0005 ICP
-  let withdrawalFee : Nat = 100_000;   // 0.001  ICP
+  // PR18.2: moc 1.7+ requires `transient` on every actor-scope `let` that
+  // isn't `stable`. These values are rebuilt from source on every
+  // install/upgrade so the qualifier is just a syntactic marker.
+  transient let E8S_PER_ICP : Nat = 100_000_000;
+  transient let networkFee : Nat = 50_000;       // 0.0005 ICP
+  transient let withdrawalFee : Nat = 100_000;   // 0.001  ICP
 
-  let perSecondRate : Float = 1.01 ** (1.0 / 86400.0);
-  let MAX_COMPOUND_ELAPSED_S : Int = 31_536_000;
-  let MAX_TX_LOG : Nat = 100;
-  let MIN_OP_INTERVAL_NS : Int = 100_000_000;
-  let MAX_TX_AMOUNT : Nat = 1_000_000_000 * E8S_PER_ICP;
+  transient let perSecondRate : Float = 1.01 ** (1.0 / 86400.0);
+  transient let MAX_COMPOUND_ELAPSED_S : Int = 31_536_000;
+  transient let MAX_TX_LOG : Nat = 100;
+  transient let MIN_OP_INTERVAL_NS : Int = 100_000_000;
+  transient let MAX_TX_AMOUNT : Nat = 1_000_000_000 * E8S_PER_ICP;
 
   // PR11.4: with real ledger custody, the simulated 1%-daily interest
   // assumed every internal e8s was an unbacked claim that grew "for free".
@@ -31,13 +38,14 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
   // honouring claims you can't redeem. Default to disabled. A canister
   // operator can enable it later (after pre-funding a reserve canister
   // subaccount) via setAccrueInterest().
-  stable var accrueInterest : Bool = false;
+  // PR18.2: implicitly stable under `persistent actor class`.
+  var accrueInterest : Bool = false;
 
   // PR16: first-touch controller. The first non-anonymous caller of
   // claimController() becomes the only principal allowed to flip
   // accrueInterest. For a proper deployment swap this for an init-arg
   // controller or an inter-canister call to the management canister.
-  stable var controller : ?Principal = null;
+  var controller : ?Principal = null;
 
   // Mainnet ICP ledger used when no init arg is supplied.
   //
@@ -49,9 +57,9 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
   //   dfx deploy dbank-latest-backend --argument \\
   //     "(opt record { ledger = principal \\"$(dfx canister id icp_ledger_canister)\\" })"
   // scripts/local-ledger-setup.sh wires this up automatically.
-  let mainnetLedgerPrincipal : Principal = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
+  transient let mainnetLedgerPrincipal : Principal = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
 
-  let ledgerPrincipal : Principal = switch (initArgs) {
+  transient let ledgerPrincipal : Principal = switch (initArgs) {
     case (?args) args.ledger;
     case null mainnetLedgerPrincipal;
   };
@@ -97,7 +105,7 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     icrc1_transfer : (TransferArgs) -> async LedgerTransferResult;
   };
 
-  let ledger : Ledger = actor (Principal.toText(ledgerPrincipal));
+  transient let ledger : Ledger = actor (Principal.toText(ledgerPrincipal));
 
   // ─── App types (unchanged from PR9) ─────────────────────────────────────
   public type TransactionKind = { #topUp; #withdraw; #deposit };
@@ -142,9 +150,9 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     transactions : [Transaction];
   };
 
-  stable var accountEntries : [(Principal, StableAccount)] = [];
+  var accountEntries : [(Principal, StableAccount)] = [];
 
-  let accounts = TrieMap.TrieMap<Principal, Account>(Principal.equal, Principal.hash);
+  transient let accounts = TrieMap.TrieMap<Principal, Account>(Principal.equal, Principal.hash);
 
   for ((p, sa) in accountEntries.vals()) {
     let txBuf = Buffer.Buffer<Transaction>(sa.transactions.size());
@@ -296,7 +304,7 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
     let ledgerFee : Nat = try {
       await ledger.icrc1_fee();
     } catch (err) {
-      return #err(#ledgerUnreachable({ message = debug_show err }));
+      return #err(#ledgerUnreachable({ message = Error.message(err) }));
     };
 
     let totalNeeded = amount + ledgerFee;
@@ -324,7 +332,7 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
       // Inter-canister call failed at the system level; refund.
       a.balance += totalNeeded;
       a.lastSeenLedgerBalance := prevLastSeen;
-      return #err(#ledgerUnreachable({ message = debug_show err }));
+      return #err(#ledgerUnreachable({ message = Error.message(err) }));
     };
 
     switch (result) {
@@ -472,7 +480,7 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
         subaccount = ?subaccountFor(msg.caller);
       });
     } catch (err) {
-      return #err(#ledgerUnreachable({ message = debug_show err }));
+      return #err(#ledgerUnreachable({ message = Error.message(err) }));
     };
 
     if (onLedger <= a.lastSeenLedgerBalance) {
