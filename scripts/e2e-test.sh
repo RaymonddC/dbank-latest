@@ -82,7 +82,10 @@ DBANK="dbank-latest-backend"
 DBANK_ID="$(dfx canister id $DBANK)"
 LEDGER_ID="$(dfx canister id icp_ledger_canister)"
 USER_PRINCIPAL="$(dfx --identity "$USER_NAME" identity get-principal)"
-RECIPIENT_PRINCIPAL="$(dfx --identity "$RECIPIENT" identity get-principal 2>/dev/null || dfx identity new "$RECIPIENT" --storage-mode plaintext >/dev/null && dfx --identity "$RECIPIENT" identity get-principal)"
+if ! RECIPIENT_PRINCIPAL="$(dfx --identity "$RECIPIENT" identity get-principal 2>/dev/null)"; then
+  dfx identity new "$RECIPIENT" --storage-mode plaintext >/dev/null 2>&1 || true
+  RECIPIENT_PRINCIPAL="$(dfx --identity "$RECIPIENT" identity get-principal)"
+fi
 
 printf 'dbank canister:    %s\n' "$DBANK_ID"
 printf 'ledger canister:   %s\n' "$LEDGER_ID"
@@ -124,7 +127,7 @@ assert_traps "anonymous claimController" \
 # ─── 3. controller flow ───────────────────────────────────────────────────
 step "3. controller (claim once, gate setAccrueInterest)"
 
-CURRENT_CONTROLLER=$(dfx canister call $DBANK getController | tr -d ' ()opt' | sed 's/principal//;s/"//g')
+CURRENT_CONTROLLER=$(dfx canister call $DBANK getController | sed -n 's/.*principal "\([^"]*\)".*/\1/p')
 if [ -z "$CURRENT_CONTROLLER" ] || [ "$CURRENT_CONTROLLER" = "null" ]; then
   OUT=$(dfx --identity "$USER_NAME" canister call $DBANK claimController)
   assert_contains "$USER_NAME claims controller" "$OUT" "ok = principal"
@@ -196,7 +199,15 @@ assert_eq "balance grew by 500_000_000" "$POST_BALANCE" "$EXPECTED"
 # ─── 9. withdraw 1 ICP to recipient ───────────────────────────────────────
 step "9. withdraw 1 ICP to $RECIPIENT"
 
-RECIPIENT_BAL_BEFORE=$(dfx --identity "$RECIPIENT" ledger balance | awk '{print $1}' | tr -d '.')
+# Use icrc1_balance_of directly — `dfx ledger balance` defaults to the
+# hard-coded mainnet ledger id and doesn't know about our local deploy.
+recipient_balance() {
+  dfx canister call icp_ledger_canister icrc1_balance_of "(record {
+    owner = principal \"$RECIPIENT_PRINCIPAL\"; subaccount = null;
+  })" | tr -d ' ()_:nat'
+}
+
+RECIPIENT_BAL_BEFORE=$(recipient_balance)
 sleep 1
 OUT=$(dfx --identity "$USER_NAME" canister call $DBANK withdraw "(100_000_000 : nat, record {
   owner = principal \"$RECIPIENT_PRINCIPAL\";
@@ -204,10 +215,8 @@ OUT=$(dfx --identity "$USER_NAME" canister call $DBANK withdraw "(100_000_000 : 
 })")
 assert_matches "withdraw returns ok=<block-index>" "$OUT" "ok = [0-9_]+"
 
-RECIPIENT_BAL_AFTER=$(dfx --identity "$RECIPIENT" ledger balance | awk '{print $1}' | tr -d '.')
+RECIPIENT_BAL_AFTER=$(recipient_balance)
 RECIPIENT_DELTA=$((RECIPIENT_BAL_AFTER - RECIPIENT_BAL_BEFORE))
-# Expected delta: 100_000_000 e8s = 1.00000000 ICP. dfx ledger balance prints
-# in whole-e8s after stripping the dot, so delta should be 100000000.
 assert_eq "$RECIPIENT received 1 ICP on the ledger" "$RECIPIENT_DELTA" "100000000"
 
 # ─── 10. checkBalance reflects (5 - 1 - ledger_fee) ──────────────────────
