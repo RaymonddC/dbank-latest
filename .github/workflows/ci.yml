@@ -95,6 +95,18 @@ jobs:
       - name: Start local replica
         run: dfx start --background --clean
 
+      - name: Pull deps
+        # main.mo doesn't import these (dynamic actor refs at runtime), but
+        # dfx still wants every canister listed in dfx.json to be locatable
+        # before it'll build a sibling canister.
+        run: dfx deps pull
+
+      - name: Create canister id
+        # `dfx build` requires a canister-id to embed for type binding;
+        # `dfx canister create` registers the canister with the local
+        # replica.
+        run: dfx canister create dbank-latest-backend
+
       - name: Build dbank-latest-backend
         run: dfx build dbank-latest-backend
 
