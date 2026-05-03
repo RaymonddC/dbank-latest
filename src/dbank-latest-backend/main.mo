@@ -39,7 +39,16 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
   // controller or an inter-canister call to the management canister.
   stable var controller : ?Principal = null;
 
-  // Mainnet ICP ledger when no init arg is supplied.
+  // Mainnet ICP ledger used when no init arg is supplied.
+  //
+  // H2 (footgun): a naive `dfx deploy dbank-latest-backend` locally with
+  // no --argument override will fall through to this branch and produce a
+  // canister that talks to mainnet's ledger from a local replica. Every
+  // deposit/withdraw call returns #ledgerUnreachable. To deploy locally,
+  // pass:
+  //   dfx deploy dbank-latest-backend --argument \\
+  //     "(opt record { ledger = principal \\"$(dfx canister id icp_ledger_canister)\\" })"
+  // scripts/local-ledger-setup.sh wires this up automatically.
   let mainnetLedgerPrincipal : Principal = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
 
   let ledgerPrincipal : Principal = switch (initArgs) {
@@ -219,6 +228,9 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
   };
 
   func recordTx(a : Account, kind : TransactionKind, amount : Nat, fee : Nat) {
+    // Med3: Buffer.remove(0) shifts the rest of the buffer left, O(n) per
+    // tx. Fine at MAX_TX_LOG = 100. If you raise the cap meaningfully,
+    // switch to a true ring buffer (head/tail indices into a fixed array).
     if (a.transactions.size() >= MAX_TX_LOG) {
       ignore a.transactions.remove(0);
     };
@@ -370,11 +382,17 @@ actor class DBank(initArgs : ?{ ledger : Principal }) = self {
   };
 
   // ─── Controller / accrueInterest toggle (PR16) ──────────────────────────
-  // First-touch controller: the first non-anonymous principal to call
-  // claimController() is recorded as `controller` and is the only principal
-  // permitted to call setAccrueInterest. Subsequent claim attempts fail.
-  // For production swap this for an init-arg controller or a dynamic check
-  // against the management canister's `canister_status.controllers`.
+  //
+  // H3 ⚠ FOOTGUN: this is a *first-touch* controller. The first non-
+  // anonymous principal to call claimController() becomes the only
+  // principal allowed to flip accrueInterest. On a fresh install AND on
+  // any upgrade from a pre-PR16 version, `controller` initialises to null,
+  // which means an attacker who races the legitimate operator can grab
+  // the controller slot. The operator MUST call claimController() in the
+  // same `dfx deploy` transaction (or immediately after). For a real
+  // production deployment, swap this for an init-arg controller or a
+  // dynamic check against the management canister's
+  // `canister_status.controllers`.
 
   public type ControllerError = { #alreadyClaimed; #notController };
 

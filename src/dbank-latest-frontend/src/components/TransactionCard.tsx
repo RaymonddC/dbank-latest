@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -24,16 +24,14 @@ const TransactionCard = () => {
   const { accrueInterest } = useLimits();
   const queryClient = useQueryClient();
 
-  const [balance, setBalance] = useState<bigint>(0n);
-  const [balanceAnchor, setBalanceAnchor] = useState<number>(Date.now());
-  const [balanceLoaded, setBalanceLoaded] = useState<boolean>(false);
   const [topupAmount, setTopupAmount] = useState<string>('');
   const [withdrawAmount, setWithdrawAmount] = useState<string>('');
   const [destination, setDestination] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
-  const [refreshTick, setRefreshTick] = useState(0);
-
-  const liveBalance = useLiveBalance(balance, balanceAnchor);
+  // Optimistic overrides for the live-ticking display. When set, they take
+  // precedence over the server balance until the next successful refetch.
+  const [optimisticBalance, setOptimisticBalance] = useState<bigint | null>(null);
+  const [optimisticAnchor, setOptimisticAnchor] = useState<number>(Date.now());
 
   const feesQuery = useQuery({
     queryKey: ['fees', principal?.toText() ?? 'anonymous'],
@@ -48,30 +46,36 @@ const TransactionCard = () => {
   const fees = feesQuery.data ?? FALLBACK_FEES;
   const networkFeeIcp = e8sToIcp(fees.networkFee);
 
+  // M2: balance is a TanStack query so DepositAddress + handleWithdraw +
+  // handleTopUp can all invalidate it via queryClient.invalidateQueries.
+  const balanceQuery = useQuery({
+    queryKey: ['balance', principal?.toText() ?? 'anonymous'],
+    queryFn: async () => {
+      if (!dbank) throw new Error('No actor');
+      await dbank.compound();
+      return await dbank.checkBalance();
+    },
+    enabled: !!dbank && isAuthenticated,
+    refetchOnWindowFocus: false,
+  });
+
+  // When new server data lands, drop any optimistic override.
   useEffect(() => {
-    if (!dbank || !isAuthenticated) {
-      setBalance(0n);
-      setBalanceLoaded(false);
-      return;
+    if (balanceQuery.data !== undefined) {
+      setOptimisticBalance(null);
+      setOptimisticAnchor(Date.now());
     }
-    let cancelled = false;
-    (async () => {
-      try {
-        await dbank.compound();
-        const current = await dbank.checkBalance();
-        if (cancelled) return;
-        setBalance(current);
-        setBalanceAnchor(Date.now());
-        setBalanceLoaded(true);
-      } catch (error) {
-        if (cancelled) return;
-        toast.error('Could not fetch balance', { description: errorMessage(error) });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [dbank, isAuthenticated, refreshTick]);
+  }, [balanceQuery.data, balanceQuery.dataUpdatedAt]);
+
+  const baseBalance: bigint = optimisticBalance ?? balanceQuery.data ?? 0n;
+  const baseAnchor: number = optimisticBalance !== null ? optimisticAnchor : balanceQuery.dataUpdatedAt || Date.now();
+  const liveBalance = useLiveBalance(baseBalance, baseAnchor);
+  const balanceLoaded = balanceQuery.isSuccess || optimisticBalance !== null;
+
+  const refetchBalance = useMemo(
+    () => () => queryClient.invalidateQueries({ queryKey: ['balance'] }),
+    [queryClient],
+  );
 
   const handleTopUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,27 +94,24 @@ const TransactionCard = () => {
       return;
     }
 
-    const previousBalance = balance;
-    const previousAnchor = balanceAnchor;
-    setBalance(balance + amountE8s - fees.networkFee);
-    setBalanceAnchor(Date.now());
+    const previousOptimistic = optimisticBalance;
+    setOptimisticBalance(baseBalance + amountE8s - fees.networkFee);
+    setOptimisticAnchor(Date.now());
 
     setLoading(true);
     try {
       const result = await dbank.topUp(amountE8s);
       if ('err' in result) {
-        setBalance(previousBalance);
-        setBalanceAnchor(previousAnchor);
+        setOptimisticBalance(previousOptimistic);
         toast.error('Top-up failed', { description: describeTransferError(result.err) });
         return;
       }
       toast.success(`Topped up ${parsed} ICP`);
       setTopupAmount('');
-      setRefreshTick((t) => t + 1);
+      refetchBalance();
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
     } catch (error) {
-      setBalance(previousBalance);
-      setBalanceAnchor(previousAnchor);
+      setOptimisticBalance(previousOptimistic);
       toast.error('Top-up failed', { description: errorMessage(error) });
     } finally {
       setLoading(false);
@@ -147,20 +148,18 @@ const TransactionCard = () => {
       return;
     }
 
-    const previousBalance = balance;
-    const previousAnchor = balanceAnchor;
+    const previousOptimistic = optimisticBalance;
     // Optimistic deduction (uses an estimate of the ledger fee — actual fee
     // returned from the backend may differ marginally).
     const optimisticDeduction = amountE8s + 10_000n;
-    setBalance(balance >= optimisticDeduction ? balance - optimisticDeduction : 0n);
-    setBalanceAnchor(Date.now());
+    setOptimisticBalance(baseBalance >= optimisticDeduction ? baseBalance - optimisticDeduction : 0n);
+    setOptimisticAnchor(Date.now());
 
     setLoading(true);
     try {
       const result = await dbank.withdraw(amountE8s, dest);
       if ('err' in result) {
-        setBalance(previousBalance);
-        setBalanceAnchor(previousAnchor);
+        setOptimisticBalance(previousOptimistic);
         toast.error('Withdrawal failed', { description: describeTransferError(result.err) });
         return;
       }
@@ -169,11 +168,10 @@ const TransactionCard = () => {
       });
       setWithdrawAmount('');
       setDestination('');
-      setRefreshTick((t) => t + 1);
+      refetchBalance();
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
     } catch (error) {
-      setBalance(previousBalance);
-      setBalanceAnchor(previousAnchor);
+      setOptimisticBalance(previousOptimistic);
       toast.error('Withdrawal failed', { description: errorMessage(error) });
     } finally {
       setLoading(false);
@@ -210,23 +208,30 @@ const TransactionCard = () => {
   return (
     <div className="max-w-md w-full mx-auto space-y-5">
       <Card className="overflow-hidden">
-        <Tabs defaultValue="topup" className="w-full">
-          <TabsList aria-label="Transaction type" className="grid w-full grid-cols-2 rounded-none border-b border-border bg-transparent p-0 h-auto">
-            <TabsTrigger
-              value="topup"
-              className="rounded-none border-b-2 border-transparent py-3.5 font-medium text-muted-foreground data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
-            >
-              <Upload className="mr-2 h-4 w-4" aria-hidden />
-              Top Up
-            </TabsTrigger>
-            <TabsTrigger
-              value="withdraw"
-              className="rounded-none border-b-2 border-transparent py-3.5 font-medium text-muted-foreground data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
-            >
-              <Download className="mr-2 h-4 w-4" aria-hidden />
-              Withdraw
-            </TabsTrigger>
-          </TabsList>
+        {/* M1: in custody mode (accrueInterest=false), the simulated topUp
+            is misleading — it credits internal balance with no real ICP at
+            the deposit subaccount, so subsequent withdraw will fail with
+            #InsufficientFunds. Hide the Top Up tab entirely; users deposit
+            via the address card below. */}
+        <Tabs defaultValue={accrueInterest ? 'topup' : 'withdraw'} className="w-full">
+          {accrueInterest ? (
+            <TabsList aria-label="Transaction type" className="grid w-full grid-cols-2 rounded-none border-b border-border bg-transparent p-0 h-auto">
+              <TabsTrigger
+                value="topup"
+                className="rounded-none border-b-2 border-transparent py-3.5 font-medium text-muted-foreground data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              >
+                <Upload className="mr-2 h-4 w-4" aria-hidden />
+                Top Up
+              </TabsTrigger>
+              <TabsTrigger
+                value="withdraw"
+                className="rounded-none border-b-2 border-transparent py-3.5 font-medium text-muted-foreground data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              >
+                <Download className="mr-2 h-4 w-4" aria-hidden />
+                Withdraw
+              </TabsTrigger>
+            </TabsList>
+          ) : null}
 
           <TabsContent value="topup" className="m-0">
             <CardHeader className="space-y-2">

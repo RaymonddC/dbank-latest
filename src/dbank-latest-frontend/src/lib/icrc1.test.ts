@@ -77,4 +77,14 @@ describe('encodeIcrc1Account / decodeIcrc1Account', () => {
   it('decode rejects malformed string', () => {
     expect(() => decodeIcrc1Account(`not-a-principal-aaaaa.x`)).toThrow();
   });
+
+  it('decode trims surrounding whitespace', () => {
+    const text = encodeIcrc1Account({ owner, subaccount: null });
+    expect(decodeIcrc1Account(`  ${text}\n`).owner.toText()).toBe(owner.toText());
+  });
+
+  it('decode rejects internal whitespace', () => {
+    expect(() => decodeIcrc1Account(`${owner.toText()} extra`)).toThrow(/whitespace/);
+    expect(() => decodeIcrc1Account(`${owner.toText()}-aaa\nbbb.1`)).toThrow(/whitespace/);
+  });
 });

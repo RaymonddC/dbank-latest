@@ -24,7 +24,12 @@ export function encodeIcrc1Account(acc: IcrcAccount): string {
   return `${ownerText}-${checksum}.${subHex}`;
 }
 
-export function decodeIcrc1Account(text: string): IcrcAccount {
+export function decodeIcrc1Account(rawText: string): IcrcAccount {
+  // Med1: defensively trim leading/trailing whitespace (copy-paste from
+  // emails or QR scanners often introduces these) and reject any internal
+  // whitespace explicitly so a sneaky line break can't change the parse.
+  const text = rawText.trim();
+  if (/\s/.test(text)) throw new Error('Account string contains whitespace');
   const dashIdx = text.lastIndexOf('-');
   const dotIdx = text.lastIndexOf('.');
   // No checksum / subaccount section → owner-only.

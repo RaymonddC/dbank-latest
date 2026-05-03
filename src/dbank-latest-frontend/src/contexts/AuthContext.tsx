@@ -64,27 +64,49 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      // @icp-sdk/auth: AuthClient is now a synchronous constructor;
-      // identityProvider lives on the constructor options, not on signIn.
-      const client = new AuthClient({
-        identityProvider,
-        idleOptions: {
-          idleTimeout: IDLE_TIMEOUT_MS,
-          disableDefaultIdleCallback: true,
-        },
-      });
-      heartbeatActorRef.current = await buildAnonymousActor();
-      const authed = await client.isAuthenticated();
-      if (cancelled) return;
-      setAuthClient(client);
-      if (authed) {
-        const id = await client.getIdentity();
-        const a = await buildActor(id);
+      try {
+        // @icp-sdk/auth: AuthClient is now a synchronous constructor;
+        // identityProvider lives on the constructor options, not on signIn.
+        const client = new AuthClient({
+          identityProvider,
+          idleOptions: {
+            idleTimeout: IDLE_TIMEOUT_MS,
+            disableDefaultIdleCallback: true,
+          },
+        });
+        // Build the heartbeat actor first; if this throws (replica down,
+        // root key fetch fails) we still want the gate to open with a
+        // surfaceable error instead of hanging "Loading…" forever.
+        try {
+          heartbeatActorRef.current = await buildAnonymousActor();
+        } catch (err) {
+          if (!cancelled) {
+            toast.error('Could not connect to the canister', {
+              description: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+        const authed = await client.isAuthenticated();
         if (cancelled) return;
-        setIdentity(id);
-        setActor(a);
+        setAuthClient(client);
+        if (authed) {
+          const id = await client.getIdentity();
+          const a = await buildActor(id);
+          if (cancelled) return;
+          setIdentity(id);
+          setActor(a);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          toast.error('Could not initialise the wallet', {
+            description: err instanceof Error ? err.message : String(err),
+          });
+        }
+      } finally {
+        // Always open the gate. If init failed, the user sees an error
+        // toast and the connection banner; the page is at least usable.
+        if (!cancelled) setIsReady(true);
       }
-      setIsReady(true);
     })();
     return () => {
       cancelled = true;
@@ -110,14 +132,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     [authClient],
   );
 
+  // H1: IdleManager has no `unregister` method, so naive
+  // registerCallback-on-every-effect-run accumulates callbacks. We capture
+  // the latest `logout` in a ref and register a single stable trampoline
+  // exactly once per AuthClient instance.
+  const logoutRef = useRef<typeof logout>(logout);
+  useEffect(() => {
+    logoutRef.current = logout;
+  }, [logout]);
+
+  const idleRegisteredRef = useRef<AuthClient | null>(null);
   useEffect(() => {
     if (!authClient || !identity) return;
+    if (idleRegisteredRef.current === authClient) return;
     const idleManager = authClient.idleManager;
     if (!idleManager) return;
     idleManager.registerCallback(() => {
-      void logout('idle');
+      void logoutRef.current('idle');
     });
-  }, [authClient, identity, logout]);
+    idleRegisteredRef.current = authClient;
+  }, [authClient, identity]);
 
   useEffect(() => {
     if (!authClient || !identity) return;
